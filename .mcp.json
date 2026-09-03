@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp?project_ref=muubngtnkltnyiecivky&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching"
+    },
+    "trigger": {
+      "command": "npx",
+      "args": ["trigger.dev@4.5.11", "mcp", "--dev-only"]
+    }
+  }
+}

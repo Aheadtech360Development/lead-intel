@@ -1,0 +1,30 @@
+{
+  "name": "@lead-intel/jobs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./analyse": "./trigger/analyse-run.ts",
+    "./discovery": "./trigger/discovery.ts",
+    "./enrich": "./trigger/enrich-run.ts",
+    "./categorise": "./trigger/categorise.ts"
+  },
+  "scripts": {
+    "dev": "trigger dev",
+    "deploy": "trigger deploy",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@lead-intel/core": "0.1.0",
+    "@lead-intel/db": "0.1.0",
+    "@lead-intel/providers": "0.1.0",
+    "@lead-intel/shared": "0.1.0",
+    "@trigger.dev/sdk": "4.5.11",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "trigger.dev": "^4.5.11",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,28 @@
+node_modules/
+dist/
+build/
+.next/
+coverage/
+out/
+
+# Trigger.dev's local build cache. Large, machine-specific, and it contains bundled copies of the
+# worker code — exactly the thing that should be rebuilt on deploy rather than carried in git.
+.trigger/
+
+.env
+.env.local
+.env.*.local
+# Belt and braces: the two files that actually hold live keys, named outright so a future change to
+# the patterns above cannot quietly start including them.
+apps/jobs/.env
+apps/web/.env.local
+
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+
+# Vercel and Turbopack local state
+.vercel/
+.turbo/
+
+drizzle/meta/

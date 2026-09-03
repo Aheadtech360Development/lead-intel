@@ -1,0 +1,23 @@
+{
+  "name": "local-lead-intel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local Business Lead Intelligence System — AheadTech360",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:packages": "npm run build --workspace=@lead-intel/shared && npm run build --workspace=@lead-intel/core && npm run build --workspace=@lead-intel/db && npm run build --workspace=@lead-intel/providers",
+    "build": "npm run build:packages && npm run build --workspace=@lead-intel/web"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -20,11 +20,11 @@
     "@lead-intel/db": "0.1.0",
     "@lead-intel/providers": "0.1.0",
     "@lead-intel/shared": "0.1.0",
-    "@trigger.dev/sdk": "4.5.11",
+    "@trigger.dev/sdk": "4.5.16",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
-    "trigger.dev": "^4.5.11",
+    "trigger.dev": "^4.5.16",
     "typescript": "^5.6.3"
   }
 }

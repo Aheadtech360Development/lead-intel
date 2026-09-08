@@ -16,6 +16,13 @@ import {
 } from "@lead-intel/shared";
 import type { CheckResult } from "../checks/types.js";
 import { scoreAreas, type AreaScore } from "./areas.js";
+import {
+  DEFAULT_DEMAND_THRESHOLDS,
+  demandRouteReason,
+  provenDemand,
+  type DemandSignals,
+  type DemandThresholds,
+} from "./demand.js";
 
 export interface BusinessScore {
   areas: Record<ServiceArea, AreaScore>;
@@ -65,6 +72,13 @@ export function scoreBusiness(params: {
    * one of only two Tier 1 leads.
    */
   sharedDomainReason?: string | null;
+  /**
+   * Review count, rating and follower count, for the one case where they can carry a business on
+   * their own: a listing with no website behind it. See demand.ts for why that case exists and why
+   * these businesses were previously invisible.
+   */
+  demand?: DemandSignals;
+  demandThresholds?: DemandThresholds;
 }): BusinessScore {
   const areas = scoreAreas(params.findings);
   const scored = Object.values(areas).filter(
@@ -83,6 +97,59 @@ export function scoreBusiness(params: {
     // Nothing was measured well enough to score. This is a real and common state — a site that
     // could not be read produces exactly it — and it must not collapse into "no problems".
     if (params.presence === "unclear") manualReviewReasons.push("unclear_website_status");
+
+    /**
+     * One exception, and it rescues the best leads in the list.
+     *
+     * A business whose Google listing has no website and which has proven demand anyway needs no
+     * area score to be worth calling — the absence *is* the finding, and the reviews or followers
+     * are the evidence that somebody wants what they sell. 75 of 76 such businesses were falling
+     * out here, including 4.9 stars from 336 reviews.
+     *
+     * Chains are excluded by the same `sharedDomainReason` test the gate uses below, and for the
+     * same reason. Measuring this rule before building it turned up Hobby Lobby and Michaels among
+     * the candidates — a naive version would have put a national retailer at the top of a local
+     * agency's call list.
+     */
+    const demand =
+      params.presence === "unclear" && !params.sharedDomainReason && params.demand
+        ? provenDemand(params.demand, params.demandThresholds ?? DEFAULT_DEMAND_THRESHOLDS)
+        : null;
+
+    if (demand) {
+      return {
+        areas,
+        problemScore: PRESENCE_OVERRIDE_PROBLEM_SCORE,
+        intentScore,
+        /**
+         * Tier 1 outright, not through the grid.
+         *
+         * §6.4's grid needs a high Problem score **and** a high Intent score, and Intent is the sum
+         * of the N-family findings — which need a website to fire on. These businesses have none,
+         * so their Intent is zero and the grid puts them at Tier 3 however good their numbers are.
+         * That is what happened on the first run of this rule: seventeen businesses rescued, all of
+         * them Tier 3, one with 4.1 stars from 261 reviews.
+         *
+         * The grid is not wrong; it is being asked a question it was not built for. Intent asks
+         * "are they already spending on their presence", and its usual evidence is a tracking pixel
+         * or a live ad. Hundreds of good reviews answer the same question from a different
+         * direction — this is a business people already want, which is the whole reason to call it.
+         *
+         * `intentScore` is left at its true value rather than inflated to force the grid. The number
+         * on the record keeps meaning exactly what it means everywhere else, and the reason line
+         * below says plainly why the priority is what it is.
+         */
+        tier: 1,
+        route: "web_development",
+        routeReason: demandRouteReason(demand),
+        passedGate: true,
+        // Still flagged. The website status is genuinely unconfirmed, and the operator should see
+        // that before the call rather than discover it during one.
+        needsManualReview: true,
+        manualReviewReasons,
+      };
+    }
+
     return {
       areas,
       problemScore: null,

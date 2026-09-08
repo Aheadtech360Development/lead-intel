@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AppShell, Note, PANEL, Panel } from "../ui";
+import { AppShell, Banner, Note, PANEL, Panel } from "../ui";
 
 /**
  * Pipeline Stage 0 ("Plan"). A plain GET form so the values appear in /search/confirm's URL and
@@ -51,15 +51,16 @@ const NICHE_PRESETS: { group: string; why: string; niches: string[] }[] = [
 export default async function NewSearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ niche?: string; location?: string }>;
+  /** `error` is set when a search could not be started — see app/search/confirm/actions.ts. */
+  searchParams: Promise<{ niche?: string; location?: string; error?: string }>;
 }) {
   // The preset links come back through the URL, so the form re-renders with the box filled in and
   // the page still needs no client-side JavaScript at all.
-  const { niche = "", location = "" } = await searchParams;
+  const { niche = "", location = "", error } = await searchParams;
 
   const pill: React.CSSProperties = {
     padding: "5px 11px",
-    fontSize: 13.5,
+    fontSize: 15,
     borderRadius: 4,
     border: "1px solid var(--rule)",
     background: "var(--surface-2)",
@@ -70,18 +71,23 @@ export default async function NewSearchPage({
 
   return (
     <AppShell
+      autoRefresh={false}
       current="search"
       title="Find businesses"
       what="Pick a type of business and a place. We search Google Maps across a grid of points, remove the duplicates, then visit every website we find and analyse it for free. The next screen shows any cost before a penny is spent."
     >
 
       <>
+        {/* A search that could not be started said so only on the run's own status page, which is
+            not where the operator is looking after pressing the button. */}
+        {error ? <Banner tone="bad">{decodeURIComponent(error)}</Banner> : null}
+
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.1fr)", gap: 22, alignItems: "start" }}>
           <form action="/search/confirm" method="get" style={{ ...PANEL, padding: 22 }}>
             <div className="field">
               <label htmlFor="niche">What kind of business?</label>
               <input id="niche" name="niche" type="text" required placeholder="e.g. plumber" defaultValue={niche} />
-              <p style={{ color: "var(--ink-3)", fontSize: 13, margin: "4px 0 0" }}>
+              <p style={{ color: "var(--ink-3)", fontSize: 14.5, margin: "4px 0 0" }}>
                 Type it the way a customer would search. Pick one from the right if you are unsure.
               </p>
             </div>
@@ -89,7 +95,7 @@ export default async function NewSearchPage({
             <div className="field">
               <label htmlFor="location">Which city or area?</label>
               <input id="location" name="location" type="text" required placeholder="e.g. Miami, FL" defaultValue={location} />
-              <p style={{ color: "var(--ink-3)", fontSize: 13, margin: "4px 0 0" }}>
+              <p style={{ color: "var(--ink-3)", fontSize: 14.5, margin: "4px 0 0" }}>
                 Include the state — &ldquo;Springfield&rdquo; alone matches dozens of places worldwide.
               </p>
             </div>
@@ -97,7 +103,7 @@ export default async function NewSearchPage({
             <div className="field">
               <label htmlFor="radiusMiles">How far around it? (miles)</label>
               <input id="radiusMiles" name="radiusMiles" type="number" min="1" max="200" required defaultValue={10} />
-              <p style={{ color: "var(--ink-3)", fontSize: 13, margin: "4px 0 0" }}>
+              <p style={{ color: "var(--ink-3)", fontSize: 14.5, margin: "4px 0 0" }}>
                 Start at 10 for a first run in a new area. Above about 20 miles the analysis takes
                 longer than the system currently allows in one go.
               </p>
@@ -113,7 +119,7 @@ export default async function NewSearchPage({
                 <input id="maxSpendDollars" name="maxSpendDollars" type="number" min="1" step="0.01" defaultValue={5} />
               </div>
             </div>
-            <p style={{ color: "var(--ink-3)", fontSize: 13, margin: "-6px 0 18px" }}>
+            <p style={{ color: "var(--ink-3)", fontSize: 14.5, margin: "-6px 0 18px" }}>
               The run stops cleanly at this amount and keeps everything it has already found. A dense
               city can cost far more than a quiet one, which is why this has a default rather than
               being left blank.
@@ -131,8 +137,8 @@ export default async function NewSearchPage({
             >
               {NICHE_PRESETS.map((group, i) => (
                 <div key={group.group} style={{ padding: "13px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)" }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 2 }}>{group.group}</div>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginBottom: 9 }}>{group.why}</div>
+                  <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 2 }}>{group.group}</div>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginBottom: 9 }}>{group.why}</div>
                   <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
                     {group.niches.map((preset) => (
                       // A link that pre-fills the form via the URL, so the page still needs no

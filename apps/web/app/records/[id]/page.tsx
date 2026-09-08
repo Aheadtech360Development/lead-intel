@@ -1,23 +1,33 @@
-import { buildOpeners, type CheckResult } from "@lead-intel/core";
+import { PAGE_TYPE_LABELS, buildOpeners, type CheckResult } from "@lead-intel/core";
 import { BUSINESS_ORIGIN_LABELS, type BusinessOrigin } from "@lead-intel/shared";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { loadJobsForBusiness } from "@/lib/job-runs";
+import { loadScorecards } from "@/lib/page-scorecards";
+import { auditWebsite } from "./audit-actions";
 import { createClient } from "@/lib/supabase/server";
 import { explainBusiness } from "./explain-actions";
+import { saveInstagramUrl } from "./social-actions";
 import {
   AppShell,
   AREA_EXPLAIN,
   AREA_LABELS,
+  Badge,
+  Banner,
+  Fact,
+  FactGrid,
   Meter,
   Note,
   PANEL,
   Panel,
   ROUTE_LABELS,
+  Stars,
   TD,
   TIER_MEANING,
   TierBadge,
   WEBSITE_LABELS,
 } from "../../ui";
+import { JobLine } from "../../running-jobs";
 import { claimBusiness, releaseClaim } from "../actions";
 import { logOutcome } from "./outcome-actions";
 
@@ -29,6 +39,15 @@ import { logOutcome } from "./outcome-actions";
  * that "why is this Priority 1" had no answer on the page. So the tier is now spelled out as the
  * two comparisons that actually produced it, using this business's own numbers.
  */
+
+const GROUP_HEAD = (colour: string): React.CSSProperties => ({
+  padding: "12px 18px 0",
+  fontSize: 14,
+  fontWeight: 800,
+  letterSpacing: "0.05em",
+  textTransform: "uppercase",
+  color: colour,
+});
 
 const AREA_ORDER = ["WEB", "SEO", "REP", "CON", "SOC", "ADS"];
 
@@ -42,14 +61,14 @@ const ROUTE_TO_AREA: Record<string, string> = {
 };
 
 const label: React.CSSProperties = {
-  fontSize: 13,
+  fontSize: 14.5,
   letterSpacing: "0.06em",
   textTransform: "uppercase",
   color: "var(--ink-3)",
 };
 const input: React.CSSProperties = {
   padding: "8px 10px",
-  fontSize: 14,
+  fontSize: 15.5,
   border: "1px solid var(--rule)",
   borderRadius: 4,
   background: "var(--surface)",
@@ -62,7 +81,7 @@ const detailPanel: React.CSSProperties = { ...PANEL, marginBottom: 12 };
 const detailSummary: React.CSSProperties = {
   padding: "12px 18px",
   cursor: "pointer",
-  fontSize: 13.5,
+  fontSize: 15,
   fontWeight: 600,
   color: "var(--ink-2)",
 };
@@ -83,8 +102,23 @@ function readAreaScores(value: unknown): AreaScoreRow[] {
   return AREA_ORDER.map((a) => byArea[a]).filter((r): r is AreaScoreRow => Boolean(r));
 }
 
-export default async function RecordDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RecordDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  /**
+   * The answer to whatever the operator just pressed.
+   *
+   * This page did not accept these at all, while its own actions — start an audit, save an
+   * Instagram handle, write the AI briefing — every one of them redirects back here with `saved` or
+   * `error`. So every message any of them has ever produced was discarded on arrival, and pressing
+   * a button here has always looked identical to pressing nothing.
+   */
+  searchParams: Promise<{ saved?: string; error?: string }>;
+}) {
   const { id } = await params;
+  const message = await searchParams;
   const supabase = await createClient();
 
   const { data: claimsData } = await supabase.auth.getClaims();
@@ -129,6 +163,42 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
   const aiCategoryNote = fieldValue("ai_category_note");
   const aiWrittenAt = (fields ?? []).find((f) => f.field_name === "ai_summary")?.last_verified_at ?? null;
 
+  const websiteUrl = fieldValue("website_url");
+
+  /**
+   * Google's own numbers, which this page has never shown.
+   *
+   * 271 of 422 businesses have a rating and a review count stored, bought and paid for through the
+   * Places API, and until now not one of them appeared anywhere on the record they belong to. The
+   * operator's report was simply "sab Google Reviews ... visible hon", and it was correct: the data
+   * was there the whole time.
+   */
+  const rating = fieldValue("rating");
+  const reviewCount = fieldValue("review_count");
+  const googleCategory = fieldValue("google_category") ?? fieldValue("primary_type");
+  const businessStatus = fieldValue("business_status");
+  const listingOutcome = fieldValue("listing_outcome");
+
+  const youtube = {
+    channel: fieldValue("youtube_channel_title"),
+    channelId: fieldValue("youtube_channel_id"),
+    latestVideoAt: fieldValue("youtube_latest_video_at"),
+    outcome: fieldValue("youtube_outcome"),
+  };
+
+  const site = {
+    title: fieldValue("page_title"),
+    pagesRead: fieldValue("pages_read"),
+    crawlOutcome: fieldValue("crawl_outcome"),
+    crawlDetail: fieldValue("crawl_detail"),
+    httpStatus: fieldValue("http_status"),
+    finalUrl: fieldValue("final_url"),
+    webPhone: fieldValue("contact_phone_web"),
+  };
+
+  // Every job this business has been through, so "did that audit actually run?" is answered here
+  // rather than by going back to the leads screen and hoping the banner is still up.
+  const businessJobs = await loadJobsForBusiness(supabase, id);
   const contactEmail = fieldValue("contact_email");
   const contactName = fieldValue("contact_name");
   const contactNameSource = fieldValue("contact_name_source");
@@ -156,6 +226,10 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
     checkedAt: fieldValue("meta_ads_checked_at"),
   };
 
+  // The page-by-page audit, judged against the current checklists. See lib/page-scorecards.ts
+  // for why the verdicts are worked out here rather than stored.
+  const scorecards = await loadScorecards(supabase, id, business.category ?? null);
+
   const problems = (findings ?? []).filter((f) => f.outcome === "fired" && f.family !== "N");
   const credits = (findings ?? []).filter((f) => f.outcome === "fired" && f.family === "N");
   const clean = (findings ?? []).filter((f) => f.outcome === "passed");
@@ -177,24 +251,28 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
   const lcp = fieldValue("lcp_ms");
 
   return (
-    <AppShell wide back={{ href: "/records", label: "Back to all leads" }}>
+    <AppShell
+      autoRefresh={false} wide back={{ href: "/records", label: "Back to all leads" }}>
 
       <>
+        {message.error ? <Banner tone="bad">{decodeURIComponent(message.error)}</Banner> : null}
+        {message.saved ? <Banner tone="good">{decodeURIComponent(message.saved)}</Banner> : null}
+
         {/* ---- Header: who they are and how to reach them ---- */}
         <div style={{ ...PANEL, padding: "20px 22px", marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 380px" }}>
-              <h1 style={{ fontSize: 27, margin: "0 0 3px", lineHeight: 1.2 }}>{business.display_name}</h1>
-              <p style={{ margin: "0 0 16px", color: "var(--ink-3)", fontSize: 14.5 }}>
+              <h1 style={{ fontSize: 30, margin: "0 0 3px", lineHeight: 1.2 }}>{business.display_name}</h1>
+              <p style={{ margin: "0 0 16px", color: "var(--ink-3)", fontSize: 16 }}>
                 {[business.city, business.state].filter(Boolean).join(", ") || "Location not recorded"}
               </p>
               <div style={{ display: "flex", gap: 30, flexWrap: "wrap", rowGap: 16 }}>
                 <span>
                   <div style={label}>Phone</div>
-                  <div style={{ fontSize: 19, fontWeight: 600, marginTop: 2 }}>
+                  <div style={{ fontSize: 20.5, fontWeight: 600, marginTop: 2 }}>
                     {phone ? <a href={`tel:${phone}`}>{phone}</a> : <span style={{ color: "var(--ink-3)" }}>Not found</span>}
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)" }}>from their Google listing</div>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>from their Google listing</div>
                 </span>
 
                 {/* Free, and previously invisible: the crawler has been pulling these off the
@@ -202,26 +280,43 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                 {contactEmail && (
                   <span>
                     <div style={label}>Email</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, marginTop: 3 }}>
+                    <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>
                       <a href={`mailto:${contactEmail}`}>{contactEmail}</a>
                     </div>
-                    <div style={{ fontSize: 13, color: "var(--ink-3)" }}>from their own website</div>
+                    <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>from their own website</div>
                   </span>
                 )}
 
                 {contactName && (
                   <span>
                     <div style={label}>Who to ask for</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, marginTop: 3 }}>{contactName}</div>
-                    <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                    <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>{contactName}</div>
+                    <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                       {contactNameSource ? `stated on ${contactNameSource}` : "from their own website"}
                     </div>
                   </span>
                 )}
 
+                {/* Bought, stored, and until now never shown. See the note beside `rating` above. */}
+                <span>
+                  <div style={label}>Google rating</div>
+                  <div style={{ fontSize: 20.5, fontWeight: 600, marginTop: 2 }}>
+                    {rating ? (
+                      <Stars rating={Number(rating)} />
+                    ) : (
+                      <span style={{ color: "var(--ink-3)", fontSize: 17.5 }}>Not bought yet</span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
+                    {reviewCount
+                      ? `${Number(reviewCount).toLocaleString("en-GB")} ${Number(reviewCount) === 1 ? "review" : "reviews"} on Google`
+                      : "Buy their Google listing to see this"}
+                  </div>
+                </span>
+
                 <span>
                   <div style={label}>Website</div>
-                  <div style={{ fontSize: 16, marginTop: 4 }}>
+                  <div style={{ fontSize: 17.5, marginTop: 4 }}>
                     {domain ? (
                       <a href={`https://${domain}`} target="_blank" rel="noreferrer noopener">
                         {domain} ↗
@@ -230,7 +325,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                       <span style={{ color: "var(--ink-3)" }}>None on their Google listing</span>
                     )}
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                     {WEBSITE_LABELS[business.website_status] ?? business.website_status}
                   </div>
                 </span>
@@ -241,10 +336,10 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                     Problem score rests on four areas rather than six. */}
                 <span>
                   <div style={label}>Where from</div>
-                  <div style={{ fontSize: 16, marginTop: 4 }}>
+                  <div style={{ fontSize: 17.5, marginTop: 4 }}>
                     {BUSINESS_ORIGIN_LABELS[business.origin as BusinessOrigin]?.label ?? business.origin}
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", maxWidth: 300, lineHeight: 1.4 }}>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", maxWidth: 300, lineHeight: 1.4 }}>
                     {importFilename
                       ? `Row of ${importFilename}`
                       : (BUSINESS_ORIGIN_LABELS[business.origin as BusinessOrigin]?.explain ?? "")}
@@ -266,7 +361,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   </button>
                 </form>
               ) : (
-                <span style={{ fontSize: 14, color: "var(--ink-3)" }}>Claimed by someone else</span>
+                <span style={{ fontSize: 15.5, color: "var(--ink-3)" }}>Claimed by someone else</span>
               )}
             </div>
           </div>
@@ -278,7 +373,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                 background: "var(--accent-bg)",
                 border: "1px solid var(--rule)",
                 borderRadius: 4,
-                fontSize: 13.5,
+                fontSize: 15,
                 color: "var(--ink-2)",
               }}
             >
@@ -286,6 +381,172 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
             </p>
           )}
         </div>
+
+        {/*
+          * Anything this business is currently going through.
+          *
+          * The banner in the shell shows the whole queue; this shows only this business's own jobs,
+          * finished ones included, so "did that audit actually run?" is answered on the page where
+          * the question is asked rather than by navigating away and hoping.
+          */}
+        {businessJobs.length > 0 && (
+          <Panel
+            title="What has been run on this business"
+            hint="Newest first. A job still going updates itself while you watch."
+            tone={businessJobs.some((j) => j.status === "running" || j.status === "queued") ? "brand" : "plain"}
+          >
+            <div style={{ padding: "6px 18px 16px" }}>
+              {businessJobs.map((job) => (
+                <JobLine key={job.id} job={job} compact />
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        {/*
+          * Everything known about them, in one place, grouped by who told us.
+          *
+          * The operator's report was that opening a business did not show what the system knows.
+          * It was accurate: Google's rating and review count, the YouTube channel, the speed
+          * measurement, the page title and the crawl result were all stored and none of them
+          * appeared anywhere. Grouping by source rather than by subject is deliberate - these facts
+          * have very different reliability, and a screen that mixes them teaches the operator to
+          * trust them equally.
+          */}
+        <Panel
+          title="Everything we know about them"
+          hint="Grouped by where each fact came from, because they are not all equally reliable. Anything blank says so rather than being left empty."
+          tone="info"
+        >
+          <div style={GROUP_HEAD("var(--info-ink)")}>From their Google listing</div>
+          <FactGrid>
+            <Fact label="Rating" value={rating ? <Stars rating={Number(rating)} /> : null} missing="Not bought" from="Google Places" />
+            <Fact
+              label="Reviews"
+              value={reviewCount ? Number(reviewCount).toLocaleString("en-GB") : null}
+              missing="Not bought"
+              from="Google Places"
+            />
+            <Fact label="Phone" value={phone ? <a href={`tel:${phone}`}>{phone}</a> : null} missing="None listed" from="Google Places" />
+            <Fact label="Google files them under" value={googleCategory} missing="Not recorded" from="Google Places" />
+            <Fact
+              label="Still trading?"
+              value={businessStatus === "operational" ? "Yes, operational" : businessStatus}
+              missing="Not checked"
+              from="Google Places"
+              tone={businessStatus === "operational" ? "good" : businessStatus ? "warn" : undefined}
+            />
+            <Fact
+              label="Listing bought?"
+              value={listingOutcome === "ok" ? "Yes, rating and reviews are real" : listingOutcome}
+              missing="Not bought yet"
+              from={listingOutcome ? "3.5c already spent with Google" : "would cost 3.5c with Google"}
+            />
+          </FactGrid>
+
+          <div style={{ ...GROUP_HEAD("var(--good-ink)"), borderTop: "1px solid var(--rule)", marginTop: 4 }}>
+            From their own website &mdash; free, our own crawler
+          </div>
+          <FactGrid>
+            <Fact
+              label="Website"
+              value={domain ? <a href={`https://${domain}`} target="_blank" rel="noreferrer noopener">{domain} &#8599;</a> : null}
+              missing="None found"
+              from={WEBSITE_LABELS[business.website_status] ?? business.website_status}
+            />
+            <Fact label="What the site calls itself" value={site.title} missing="No title tag" from="their home page" />
+            <Fact label="Pages we read" value={site.pagesRead} missing="None read" from={site.crawlOutcome ?? "not crawled"} />
+            <Fact
+              label="Speed on a phone"
+              value={perfScore ? `${perfScore} / 100` : null}
+              missing="No score"
+              from={lcp ? `main content appears in ${(Number(lcp) / 1000).toFixed(1)}s` : "Google PageSpeed, free"}
+              tone={perfScore ? (Number(perfScore) >= 50 ? "good" : "bad") : undefined}
+            />
+            <Fact
+              label="Email on their site"
+              value={contactEmail ? <a href={`mailto:${contactEmail}`}>{contactEmail}</a> : null}
+              missing="None found"
+              from="their own pages"
+            />
+            <Fact label="Phone on their site" value={site.webPhone} missing="None found" from="their own pages" />
+            <Fact
+              label="Who to ask for"
+              value={contactName}
+              missing="Not stated anywhere"
+              from={contactNameSource ? `stated on ${contactNameSource}` : "their about page"}
+            />
+            <Fact label="Server answered" value={site.httpStatus} missing="Never answered" from={site.crawlDetail ?? "our crawler"} />
+          </FactGrid>
+
+          <div style={{ ...GROUP_HEAD("var(--social-ink)"), borderTop: "1px solid var(--rule)", marginTop: 4 }}>
+            Away from their own site
+          </div>
+          <FactGrid>
+            <Fact
+              label="Instagram"
+              value={
+                instagram.handle ? (
+                  <a href={instagram.url ?? `https://instagram.com/${instagram.handle}`} target="_blank" rel="noreferrer noopener">
+                    @{instagram.handle} &#8599;
+                  </a>
+                ) : null
+              }
+              missing="No account known"
+              from={instagram.url ? "found on their website, or typed in" : "paste one below if you know it"}
+            />
+            <Fact
+              label="Followers"
+              value={instagram.followers ? Number(instagram.followers).toLocaleString("en-GB") : null}
+              missing="Not bought"
+              from={instagram.followers ? "Apify, 0.26c already spent" : "would cost 0.26c with Apify"}
+              size="large"
+              tone={instagram.followers && Number(instagram.followers) >= 10000 ? "good" : undefined}
+            />
+            <Fact label="Posts" value={instagram.posts} missing="Not bought" from="Apify" />
+            <Fact label="Instagram files them under" value={instagram.category} missing="Not bought" from="Apify" />
+            <Fact
+              label="Facebook"
+              value={metaAds.page ? <a href={metaAds.page} target="_blank" rel="noreferrer noopener">Their page &#8599;</a> : null}
+              missing="None found"
+              from="linked from their website"
+            />
+            <Fact
+              label="Running ads?"
+              value={
+                metaAds.running === "true"
+                  ? `Yes, ${metaAds.activeCount ?? "some"} live`
+                  : metaAds.running === "false"
+                    ? "No ads running"
+                    : null
+              }
+              missing="Never checked"
+              from={metaAds.checkedAt ? "Meta Ad Library, already bought" : "would cost 11.6c with Apify"}
+              tone={metaAds.running === "true" ? "good" : undefined}
+            />
+            <Fact
+              label="YouTube"
+              value={youtube.channel}
+              missing={youtube.outcome === "failed" ? "No channel found" : "Not checked"}
+              from={
+                youtube.latestVideoAt
+                  ? `last video ${new Date(youtube.latestVideoAt).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+                  : "YouTube Data API, free"
+              }
+            />
+          </FactGrid>
+
+          {instagram.bio && (
+            <div style={{ padding: "0 18px 16px" }}>
+              <div style={{ fontSize: 13.5, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--ink-2)", fontWeight: 800 }}>
+                What their Instagram bio says
+              </div>
+              <div style={{ fontSize: 15.5, color: "var(--ink)", marginTop: 4, lineHeight: 1.6, whiteSpace: "pre-wrap", maxWidth: 720 }}>
+                {instagram.bio}
+              </div>
+            </div>
+          )}
+        </Panel>
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
           {/* ================= LEFT: what to do ================= */}
@@ -296,7 +557,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
               tone="brand"
             >
               {openers.openers.length === 0 ? (
-                <div style={{ padding: 18, color: "var(--ink-3)", fontSize: 14.5 }}>{openers.reason}</div>
+                <div style={{ padding: 18, color: "var(--ink-3)", fontSize: 16 }}>{openers.reason}</div>
               ) : (
                 openers.openers.map((o, i) => (
                   <div
@@ -304,8 +565,8 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                     style={{ padding: "15px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)" }}
                   >
                     <div style={{ ...label, marginBottom: 7 }}>{o.channel === "call" ? "On the phone" : "As a message"}</div>
-                    <p style={{ margin: "0 0 8px", fontSize: 16.5, lineHeight: 1.55 }}>&ldquo;{o.text}&rdquo;</p>
-                    <div style={{ fontSize: 13, color: "var(--ink-3)" }}>Because we found: {o.evidence}</div>
+                    <p style={{ margin: "0 0 8px", fontSize: 18, lineHeight: 1.55 }}>&ldquo;{o.text}&rdquo;</p>
+                    <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>Because we found: {o.evidence}</div>
                   </div>
                 ))
               )}
@@ -323,12 +584,12 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   <div style={label}>Instagram</div>
                   {instagram.handle ? (
                     <>
-                      <div style={{ fontSize: 16, fontWeight: 600, marginTop: 3 }}>
+                      <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>
                         <a href={`https://instagram.com/${instagram.handle}`} target="_blank" rel="noreferrer noopener">
                           @{instagram.handle} &#8599;
                         </a>
                         {instagram.verified === "true" ? (
-                          <span style={{ fontSize: 13, color: "var(--ink-3)" }}> &middot; verified</span>
+                          <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}> &middot; verified</span>
                         ) : null}
                       </div>
                       <div style={{ display: "flex", gap: 24, marginTop: 9, flexWrap: "wrap" }}>
@@ -340,29 +601,52 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                         <Figure value={instagram.category ?? "—"} label="Instagram's own category" />
                       </div>
                       {instagram.bio ? (
-                        <p style={{ fontSize: 13.5, color: "var(--ink-2)", margin: "11px 0 0", lineHeight: 1.5 }}>
+                        <p style={{ fontSize: 15, color: "var(--ink-2)", margin: "11px 0 0", lineHeight: 1.5 }}>
                           &ldquo;{instagram.bio}&rdquo;
                         </p>
                       ) : null}
                       {instagram.isPrivate === "true" ? (
-                        <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "7px 0 0", lineHeight: 1.45 }}>
+                        <p style={{ fontSize: 14.5, color: "var(--ink-3)", margin: "7px 0 0", lineHeight: 1.45 }}>
                           This account is private, so Instagram withholds the follower count. That is
                           why it reads &ldquo;not shown&rdquo; rather than zero.
                         </p>
                       ) : null}
                     </>
-                  ) : instagram.url ? (
-                    <div style={{ fontSize: 13.5, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
+                  ) : !instagram.url ? (
+                    /* No link, and no way for the crawler to find one — this business has no site
+                       to crawl. Typing it is the only route, and it is the route to Priority 1:
+                       10,000 followers qualifies on its own. */
+                    <form action={saveInstagramUrl} style={{ marginTop: 6 }}>
+                      <input type="hidden" name="id" value={id} />
+                      <div style={{ fontSize: 15, color: "var(--ink-2)", marginBottom: 7, lineHeight: 1.55 }}>
+                        {business.website_status === "unclear" ? (
+                          <>
+                            No website to find one on, so nobody can look this up for you. Paste it
+                            and a large following can carry them to Priority 1 on its own.
+                          </>
+                        ) : (
+                          <>No Instagram link was found on their website. Paste one if you know it.</>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <input
+                          name="instagram"
+                          placeholder="instagram.com/theirname"
+                          style={{ ...input, flex: "1 1 210px", minWidth: 0 }}
+                        />
+                        <button className="btn-2 btn" type="submit" style={{ fontSize: 15 }}>
+                          Save
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
                       Their website links to{" "}
                       <a href={instagram.url} target="_blank" rel="noreferrer noopener">
                         an Instagram account
                       </a>
                       , and nobody has looked it up yet. Tick this business on the leads list to buy
                       it &mdash; it costs a fraction of a cent.
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 13.5, color: "var(--ink-3)", marginTop: 4 }}>
-                      No Instagram link was found on their website.
                     </div>
                   )}
                 </div>
@@ -371,23 +655,23 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   <div style={label}>Facebook &amp; Instagram ads</div>
                   {metaAds.checkedAt ? (
                     <>
-                      <div style={{ fontSize: 16, fontWeight: 600, marginTop: 3 }}>
+                      <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>
                         {metaAds.running === "true"
                           ? `Running ${metaAds.activeCount ?? ""} ad${metaAds.activeCount === "1" ? "" : "s"} right now`
                           : "Not running any ads"}
                       </div>
                       {metaAds.since ? (
-                        <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 2 }}>
+                        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2 }}>
                           advertising since {metaAds.since}
                           {metaAds.platforms ? ` on ${metaAds.platforms}` : ""}
                         </div>
                       ) : null}
                       {metaAds.sample ? (
-                        <p style={{ fontSize: 13, color: "var(--ink-2)", margin: "10px 0 0", lineHeight: 1.5 }}>
+                        <p style={{ fontSize: 14.5, color: "var(--ink-2)", margin: "10px 0 0", lineHeight: 1.5 }}>
                           &ldquo;{metaAds.sample.split(" \u23D0 ")[0]}&rdquo;
                         </p>
                       ) : null}
-                      <p style={{ fontSize: 13, color: "var(--ink-3)", margin: "11px 0 0", lineHeight: 1.45 }}>
+                      <p style={{ fontSize: 14.5, color: "var(--ink-3)", margin: "11px 0 0", lineHeight: 1.45 }}>
                         <strong>What they spend is not shown, and cannot be.</strong> Meta publishes
                         ad spend only for political and social-issue ads; for an ordinary business it
                         is empty in Meta&rsquo;s own Ad Library, so no tool or provider can supply
@@ -395,7 +679,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                       </p>
                     </>
                   ) : metaAds.page ? (
-                    <div style={{ fontSize: 13.5, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
+                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
                       They have{" "}
                       <a href={metaAds.page} target="_blank" rel="noreferrer noopener">
                         a Facebook page
@@ -403,7 +687,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                       , and nobody has checked whether it is running ads.
                     </div>
                   ) : (
-                    <div style={{ fontSize: 13.5, color: "var(--ink-3)", marginTop: 4 }}>
+                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4 }}>
                       No Facebook page was found on their website.
                     </div>
                   )}
@@ -415,6 +699,209 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                 are unchanged. That arrangement is the whole safety design: if the paragraph is
                 wrong, the real thing is one line below it, in the operator's own words —
                 "ager AI ne sahi se explain nhi kia to mai points read kerloon". */}
+            {/* Page-by-page audit. Above the old findings because it is more specific: "the contact
+                page has no form" is a sentence to open a call with, where "CON scores 62" is not. */}
+            {/* Shown whenever there is a site to read, not only once it has been read. A feature
+                with no way to start it is a feature nobody has — the audit worked correctly and
+                invisibly for a week because nothing in the application could trigger it. */}
+            {websiteUrl && (
+              <Panel
+                title={
+                  scorecards.length > 0
+                    ? `Their website, page by page (${scorecards.length})`
+                    : "Their website, page by page"
+                }
+                hint="Judged against your checklists. Edit those on the Checklists screen — these verdicts follow immediately, because they are worked out fresh every time you open this."
+              >
+                <form
+                  action={auditWebsite}
+                  style={{ ...TD, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+                >
+                  <input type="hidden" name="id" value={id} />
+                  <button className={scorecards.length > 0 ? "btn-2 btn" : "btn"} type="submit">
+                    {scorecards.length > 0 ? "Read it again" : "Read their website"}
+                  </button>
+                  <span style={{ fontSize: 14.5, color: "var(--ink-2)", lineHeight: 1.5, flex: "1 1 320px" }}>
+                    {scorecards.length > 0
+                      ? "Re-reads every page and replaces what is below. Worth doing after they change something, or after you change a checklist rule that needs a fresh measurement."
+                      : "Opens each page of their site in a real browser, measures it, and asks the model what the measurements miss. Usually under a minute."}{" "}
+                    <span style={{ color: "var(--ink-3)" }}>
+                      Costs about half a cent of Gemini — Google&#8217;s model, which supplies the
+                      judgement — plus machine time on Trigger.dev, where the browser runs.
+                    </span>
+                  </span>
+                </form>
+
+                {/*
+                  * Said once, at the top, when a picture was meant to exist and does not.
+                  *
+                  * The reason was only ever written to the worker's log, where an operator will
+                  * never see it - so the screenshots simply appeared to be missing, with nothing on
+                  * the screen to explain why or what to do. A feature that silently does not happen
+                  * is indistinguishable from one that was never built.
+                  */}
+                {scorecards.some((c) => c.screenshotExpected && c.screenshotUrl === null && c.outcome === "ok") && (
+                  <div
+                    style={{
+                      margin: "0 18px 4px",
+                      padding: "12px 14px",
+                      background: "var(--warn-bg)",
+                      borderLeft: "3px solid var(--warn)",
+                      borderRadius: "0 6px 6px 0",
+                      fontSize: 15,
+                      lineHeight: 1.6,
+                      color: "var(--ink)",
+                    }}
+                  >
+                    <strong>The screenshots were taken but could not be stored.</strong> The worker needs{" "}
+                    <code>SUPABASE_SERVICE_ROLE_KEY</code> in <code>apps/jobs/.env</code> before it can keep them
+                    &mdash; Supabase dashboard, Project Settings, API keys, the <code>service_role</code> one. Add it and
+                    press &ldquo;Read it again&rdquo; above; everything else in this audit was measured normally.
+                  </div>
+                )}
+
+                {scorecards.map((card) => (
+                  <div key={card.url} style={{ ...TD, display: "block" }}>
+                    <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
+                      <strong style={{ fontSize: 16 }}>{PAGE_TYPE_LABELS[card.pageType]}</strong>
+                      <a href={card.url} target="_blank" rel="noreferrer noopener" style={{ fontSize: 14.5 }}>
+                        {card.url.replace(/^https?:\/\/[^/]+/, "") || "/"} &#8599;
+                      </a>
+                      <span style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "baseline" }}>
+                        {card.score !== null && (
+                          <strong
+                            style={{
+                              fontSize: 18.5,
+                              fontVariantNumeric: "tabular-nums",
+                              color: card.score >= 80 ? "var(--good)" : card.score >= 50 ? "var(--warn)" : "var(--bad)",
+                            }}
+                          >
+                            {card.score}
+                          </strong>
+                        )}
+                        <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
+                          {card.failed} to fix · {card.passed} fine
+                          {card.unknown > 0 ? ` · ${card.unknown} not checkable` : ""}
+                        </span>
+                      </span>
+                    </div>
+
+                    {card.outcome !== "ok" && (
+                      <div style={{ fontSize: 15, color: "var(--warn-ink)", marginTop: 5 }}>
+                        {card.detail ?? "This page could not be read, so nothing below is a judgement about it."}
+                      </div>
+                    )}
+
+                    {/* The picture, for the two pages an operator would actually put in front of a
+                        client. Every other page's screenshot was taken, shown to the model and
+                        thrown away - keeping all of them would fill the free gigabyte for no gain.
+                        Shown open rather than behind a disclosure: it was collapsed at first, and
+                        the operator's report was that they could not find the screenshots at all.
+                        A picture nobody clicks to reveal is a picture that does not exist. */}
+                    {card.screenshotUrl && (
+                      <div style={{ marginTop: 10 }}>
+                        <div
+                          style={{
+                            fontSize: 13.5,
+                            letterSpacing: "0.05em",
+                            textTransform: "uppercase",
+                            color: "var(--ink-2)",
+                            fontWeight: 800,
+                            marginBottom: 4,
+                          }}
+                        >
+                          How the page actually looks &mdash; click to open full size
+                        </div>
+                        <a href={card.screenshotUrl} target="_blank" rel="noreferrer noopener">
+                          {/* eslint-disable-next-line @next/next/no-img-element -- a signed
+                              Supabase link, not a static asset; next/image would need the host
+                              whitelisted and would re-fetch a URL that expires in an hour. */}
+                          <img
+                            src={card.screenshotUrl}
+                            alt={`${PAGE_TYPE_LABELS[card.pageType]} of ${business.display_name}`}
+                            style={{
+                              display: "block",
+                              width: "100%",
+                              maxWidth: 640,
+                              border: "1px solid var(--rule-2)",
+                              borderRadius: 8,
+                              boxShadow: "var(--shadow-sm)",
+                            }}
+                          />
+                        </a>
+                      </div>
+                    )}
+
+                    {/* The model's read, kept visibly apart from the measurements above it.
+                        Everything else on this card is something a browser measured; this is an
+                        opinion, and an opinion that looks like a measurement is the one failure
+                        mode this feature must not have. */}
+                    {card.critique && (
+                      <div
+                        style={{
+                          marginTop: 8,
+                          padding: "8px 10px",
+                          borderLeft: "3px solid var(--info)",
+                          background: "var(--surface-2)",
+                          borderRadius: 4,
+                          fontSize: 15,
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        <div style={{ fontSize: 13, letterSpacing: 0.4, color: "var(--ink-2)", fontWeight: 700 }}>
+                          WHAT THE MODEL MAKES OF IT
+                        </div>
+                        <div style={{ marginTop: 4 }}>{card.critique.purpose}</div>
+                        <div style={{ marginTop: 4 }}>{card.critique.judgement}</div>
+                        {card.critique.openWith && (
+                          <div style={{ marginTop: 6 }}>
+                            <strong>Open with:</strong> {card.critique.openWith}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Why there is no opinion, when there is none. A blank space would be
+                        indistinguishable from a feature that quietly broke. */}
+                    {!card.critique && card.critiqueDetail && (
+                      <div style={{ fontSize: 14, color: "var(--ink-3)", marginTop: 8 }}>
+                        No read on this page: {card.critiqueDetail}
+                      </div>
+                    )}
+
+                    {card.results
+                      .filter((r) => r.outcome === "failed")
+                      .map((r) => (
+                        <div key={r.rule.id} style={{ fontSize: 15, marginTop: 6, lineHeight: 1.5 }}>
+                          <span style={{ color: "var(--bad)", fontWeight: 700 }}>✕</span> {r.rule.says}{" "}
+                          <span style={{ color: "var(--ink-3)" }}>
+                            ({r.because}
+                            {r.found ? `, found: ${r.found}` : ""})
+                          </span>
+                        </div>
+                      ))}
+
+                    {/* Named, not hidden. A rule nobody could evaluate is a gap in what we know, and
+                        the operator should see that rather than assume the page passed it. */}
+                    {card.unknown > 0 && (
+                      <details style={{ marginTop: 6 }}>
+                        <summary style={{ fontSize: 14, color: "var(--ink-3)", cursor: "pointer" }}>
+                          {card.unknown} could not be checked on this page
+                        </summary>
+                        {card.results
+                          .filter((r) => r.outcome === "unknown")
+                          .map((r) => (
+                            <div key={r.rule.id} style={{ fontSize: 14, color: "var(--ink-3)", marginTop: 3 }}>
+                              {r.rule.name} — {r.because}
+                            </div>
+                          ))}
+                      </details>
+                    )}
+                  </div>
+                ))}
+              </Panel>
+            )}
+
             <div id="summary" style={{ scrollMarginTop: 20 }} />
             <div
               style={{
@@ -435,10 +922,10 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   flexWrap: "wrap",
                 }}
               >
-                <strong style={{ fontSize: 15 }}>✨ In plain words</strong>
+                <strong style={{ fontSize: 16.5 }}>✨ In plain words</strong>
                 <form action={explainBusiness} style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <input type="hidden" name="id" value={id} />
-                  <button className="btn-2 btn" type="submit" style={{ fontSize: 13 }}>
+                  <button className="btn-2 btn" type="submit" style={{ fontSize: 14.5 }}>
                     {aiSummary ? "Write it again" : "Explain this business"}
                   </button>
                 </form>
@@ -449,7 +936,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   {String(aiSummary)
                     .split(/\n{2,}/)
                     .map((para: string, i: number) => (
-                    <p key={i} style={{ margin: i === 0 ? "0 0 10px" : "0 0 10px", fontSize: 15, lineHeight: 1.65 }}>
+                    <p key={i} style={{ margin: i === 0 ? "0 0 10px" : "0 0 10px", fontSize: 16.5, lineHeight: 1.65 }}>
                       {para}
                     </p>
                   ))}
@@ -461,7 +948,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                         padding: "10px 12px",
                         background: "var(--warn-bg)",
                         borderRadius: 5,
-                        fontSize: 13.5,
+                        fontSize: 15,
                         lineHeight: 1.55,
                       }}
                     >
@@ -472,7 +959,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                     </div>
                   )}
 
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 12, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 12, lineHeight: 1.6 }}>
                     Written by <strong>gemini-2.5-flash</strong>
                     {aiWrittenAt ? ` on ${new Date(aiWrittenAt).toLocaleDateString("en-GB")}` : ""} from the{" "}
                     {problems.length} findings below and their website text.{" "}
@@ -481,7 +968,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   </div>
                 </div>
               ) : (
-                <div style={{ padding: "15px 18px", fontSize: 14, color: "var(--ink-2)", lineHeight: 1.6 }}>
+                <div style={{ padding: "15px 18px", fontSize: 15.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
                   A short briefing written from the findings below and their website text, so you can
                   read one paragraph instead of {problems.length} lines before ringing them. Costs
                   about a third of a cent, and the findings stay exactly as they are underneath.
@@ -491,13 +978,13 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
 
             <Panel title={`The biggest problems (${problems.length})`} hint="Ordered by how much each one matters.">
               {problems.length === 0 ? (
-                <div style={{ padding: 18, color: "var(--ink-3)", fontSize: 14 }}>
+                <div style={{ padding: 18, color: "var(--ink-3)", fontSize: 15.5 }}>
                   Nothing the free checks look for is wrong with this business.
                 </div>
               ) : (
                 problems.slice(0, 8).map((f, i) => (
-                  <div key={f.check_id} style={{ display: "flex", gap: 14, padding: "11px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)", fontSize: 14 }}>
-                    <span style={{ flex: "0 0 150px", color: "var(--ink-3)", fontSize: 13 }}>
+                  <div key={f.check_id} style={{ display: "flex", gap: 14, padding: "11px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)", fontSize: 15.5 }}>
+                    <span style={{ flex: "0 0 150px", color: "var(--ink-3)", fontSize: 14.5 }}>
                       {AREA_LABELS[f.area ?? ""] ?? f.area}
                     </span>
                     <span style={{ flex: 1 }}>{f.evidence}</span>
@@ -574,12 +1061,12 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
             {outcomes && outcomes.length > 0 && (
               <Panel title={`Previous attempts (${outcomes.length})`}>
                 {outcomes.map((o, i) => (
-                  <div key={i} style={{ display: "flex", gap: 14, padding: "11px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)", fontSize: 14 }}>
+                  <div key={i} style={{ display: "flex", gap: 14, padding: "11px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)", fontSize: 15.5 }}>
                     <span style={{ flex: "0 0 100px", color: "var(--ink-3)" }}>{new Date(o.created_at).toLocaleDateString()}</span>
                     <span style={{ flex: 1 }}>
                       {o.channel} · {o.result.replace(/_/g, " ")}
                       {o.objection !== "none" ? ` · ${o.objection.replace(/_/g, " ")}` : ""}
-                      {o.notes ? <div style={{ color: "var(--ink-3)", fontSize: 13.5 }}>{o.notes}</div> : null}
+                      {o.notes ? <div style={{ color: "var(--ink-3)", fontSize: 15 }}>{o.notes}</div> : null}
                     </span>
                   </div>
                 ))}
@@ -592,7 +1079,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
             <Panel title="Why this lead, in plain terms">
               <div style={{ padding: "16px 18px" }}>
                 {problem === null ? (
-                  <p style={{ margin: 0, fontSize: 14.5, color: "var(--ink-2)" }}>
+                  <p style={{ margin: 0, fontSize: 16, color: "var(--ink-2)" }}>
                     <strong>We could not score this business.</strong>{" "}
                     {business.route_reason ?? "Too little could be measured."} That is not a judgement
                     about them — it means we could not read enough to have an opinion.
@@ -601,21 +1088,21 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   <>
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ ...label, marginBottom: 4 }}>Sell them</div>
-                      <div style={{ fontSize: 20, fontWeight: 700, color: "var(--accent)" }}>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>
                         {business.route ? ROUTE_LABELS[business.route] ?? business.route : "Nothing solid enough yet"}
                       </div>
                       {business.route_reason && (
-                        <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 3 }}>{business.route_reason}</div>
+                        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 3 }}>{business.route_reason}</div>
                       )}
                     </div>
 
                     <div style={{ marginBottom: 14 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, marginBottom: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 4 }}>
                         <strong>Problem score — how much is wrong</strong>
                         <span style={{ fontWeight: 700 }}>{problem} / 100</span>
                       </div>
                       <Meter value={problem} tone="problem" height={10} />
-                      <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 4 }}>
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 4 }}>
                         {problem >= 55
                           ? "Above 55, so there is enough wrong here to be worth a call."
                           : "Below 55 — not much is wrong, so this is a harder conversation to open."}
@@ -623,12 +1110,12 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                     </div>
 
                     <div style={{ marginBottom: 16 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, marginBottom: 4 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 4 }}>
                         <strong>Buying signals — do they spend money?</strong>
                         <span style={{ fontWeight: 700 }}>{intent ?? 0} / 100</span>
                       </div>
                       <Meter value={intent} tone="good" height={10} />
-                      <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 4 }}>
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 4 }}>
                         {(intent ?? 0) >= 35
                           ? "Above 35 — they already pay for tools or advertising, so there is a budget."
                           : "Below 35 — we found little sign they currently pay for anything."}
@@ -639,15 +1126,15 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                     <div style={{ padding: "13px 14px", background: "var(--surface-2)", borderRadius: 5 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
                         <TierBadge tier={business.tier} />
-                        <strong style={{ fontSize: 14.5 }}>
+                        <strong style={{ fontSize: 16 }}>
                           {business.tier ? `Priority ${business.tier}` : "No priority"}
                         </strong>
                       </div>
-                      <div style={{ fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.55 }}>
+                      <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55 }}>
                         {business.tier ? (
                           <>
                             {TIER_MEANING[business.tier]}.
-                            <div style={{ marginTop: 7, color: "var(--ink-3)", fontSize: 13 }}>
+                            <div style={{ marginTop: 7, color: "var(--ink-3)", fontSize: 14.5 }}>
                               Worked out from exactly two comparisons: problem score{" "}
                               <strong>{problem}</strong> is {problem >= 55 ? "above" : "below"} 55, and
                               buying signals <strong>{intent ?? 0}</strong> {(intent ?? 0) >= 35 ? "above" : "below"}{" "}
@@ -671,14 +1158,14 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
               {areaScores.map((a, i) => (
                 <div key={a.area} style={{ padding: "12px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 3 }}>
-                    <strong style={{ fontSize: 14 }}>{AREA_LABELS[a.area] ?? a.area}</strong>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: a.enoughData ? "var(--ink)" : "var(--ink-3)" }}>
+                    <strong style={{ fontSize: 15.5 }}>{AREA_LABELS[a.area] ?? a.area}</strong>
+                    <span style={{ fontSize: 15.5, fontWeight: 700, color: a.enoughData ? "var(--ink)" : "var(--ink-3)" }}>
                       {a.enoughData ? `${a.score} / 100` : "no data"}
                     </span>
                   </div>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginBottom: 6 }}>{AREA_EXPLAIN[a.area]}</div>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginBottom: 6 }}>{AREA_EXPLAIN[a.area]}</div>
                   <Meter value={a.enoughData ? a.score : null} tone="problem" />
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 5 }}>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 5 }}>
                     {a.enoughData
                       ? `${a.firedPoints} of the ${a.measuredPoints} points we could check came back wrong.`
                       : `We could only check ${Math.round(a.coverage * 100)}% of this area — too little to score fairly, so it is left out.`}
@@ -694,10 +1181,10 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
               <div style={{ padding: "14px 18px" }}>
                 {crux ? (
                   <>
-                    <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>
+                    <div style={{ fontSize: 17.5, fontWeight: 600, marginBottom: 4 }}>
                       Google has real visitor data for this site
                     </div>
-                    <div style={{ fontSize: 13.5, color: "var(--ink-2)" }}>
+                    <div style={{ fontSize: 15, color: "var(--ink-2)" }}>
                       Enough people visit that Google collects real speed measurements from their
                       browsers. For a small local business that means meaningful traffic — and
                       Google rates the experience as <strong>{crux.toLowerCase()}</strong>.
@@ -705,8 +1192,8 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   </>
                 ) : (
                   <>
-                    <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>Very little traffic</div>
-                    <div style={{ fontSize: 13.5, color: "var(--ink-2)" }}>
+                    <div style={{ fontSize: 17.5, fontWeight: 600, marginBottom: 4 }}>Very little traffic</div>
+                    <div style={{ fontSize: 15, color: "var(--ink-2)" }}>
                       Google does not have enough real visits to this site to report speed data from
                       actual users. That threshold is low, so it usually means the site gets very few
                       visitors.
@@ -714,7 +1201,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                   </>
                 )}
                 {(perfScore || lcp) && (
-                  <div style={{ marginTop: 12, fontSize: 13.5, color: "var(--ink-3)" }}>
+                  <div style={{ marginTop: 12, fontSize: 15, color: "var(--ink-3)" }}>
                     Speed test: {perfScore ? <strong>{perfScore}/100</strong> : "—"}
                     {lcp ? ` · main content appears in ${(Number(lcp) / 1000).toFixed(1)}s on a phone` : ""}
                   </div>
@@ -731,7 +1218,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
         </div>
 
         {/* ---- Folded detail ---- */}
-        <h2 style={{ fontSize: 13.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-3)", margin: "26px 0 12px" }}>
+        <h2 style={{ fontSize: 15, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-3)", margin: "26px 0 12px" }}>
           The full detail
         </h2>
 
@@ -743,7 +1230,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                 <span style={{ flex: "0 0 90px" }}>
                   <span
                     style={{
-                      fontSize: 13,
+                      fontSize: 14.5,
                       padding: "2px 7px",
                       borderRadius: 3,
                       border: "1px solid var(--rule)",
@@ -753,7 +1240,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                     {f.outcome === "fired" ? "problem" : f.outcome === "passed" ? "fine" : "unknown"}
                   </span>
                 </span>
-                <span style={{ flex: "0 0 150px", color: "var(--ink-3)", fontSize: 13 }}>
+                <span style={{ flex: "0 0 150px", color: "var(--ink-3)", fontSize: 14.5 }}>
                   {AREA_LABELS[f.area ?? ""] ?? "Buying signal"}
                 </span>
                 <span style={{ flex: 1 }}>{f.evidence}</span>
@@ -785,7 +1272,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
             {(keys ?? []).map((k) => (
               <div key={k.key_type + k.key_value} style={{ display: "flex", gap: 14, ...TD }}>
                 <span style={rowKey}>{k.key_type.replace(/_/g, " ")}</span>
-                <span style={{ flex: 1, fontFamily: "monospace", fontSize: 13 }}>{k.key_value}</span>
+                <span style={{ flex: 1, fontFamily: "monospace", fontSize: 14.5 }}>{k.key_value}</span>
               </div>
             ))}
             {(fields ?? []).map((f) => (
@@ -793,7 +1280,7 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
                 <span style={rowKey}>{f.field_name.replace(/_/g, " ")}</span>
                 <span style={{ flex: 1 }}>
                   {f.value}
-                  <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                     {f.source_name} · checked {new Date(f.last_verified_at).toLocaleDateString()}
                   </div>
                 </span>
@@ -810,8 +1297,8 @@ export default async function RecordDetailPage({ params }: { params: Promise<{ i
 function Figure({ value, label: text }: { value: string; label: string }) {
   return (
     <span>
-      <span style={{ display: "block", fontSize: 19, fontWeight: 700, lineHeight: 1.15 }}>{value}</span>
-      <span style={{ display: "block", fontSize: 13, color: "var(--ink-3)", marginTop: 1 }}>{text}</span>
+      <span style={{ display: "block", fontSize: 20.5, fontWeight: 700, lineHeight: 1.15 }}>{value}</span>
+      <span style={{ display: "block", fontSize: 14.5, color: "var(--ink-3)", marginTop: 1 }}>{text}</span>
     </span>
   );
 }

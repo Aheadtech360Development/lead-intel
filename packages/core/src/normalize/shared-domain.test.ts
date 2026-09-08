@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sharedPlatformDomain } from "./shared-domain.js";
+import { sharedPlatformDomain, nameMatchesChain } from "./shared-domain.js";
 
 describe("sharedPlatformDomain — chains and platforms", () => {
   /** Every one of these came out of the live dataset, several of them above the Stage 5 gate. */
@@ -64,5 +64,40 @@ describe("sharedPlatformDomain — leaves real local businesses alone", () => {
     expect(sharedPlatformDomain(undefined)).toBeNull();
     expect(sharedPlatformDomain("")).toBeNull();
     expect(sharedPlatformDomain("   ")).toBeNull();
+  });
+});
+
+/**
+ * The name check, and the line it must not cross.
+ *
+ * It exists because "Office Depot Print & Copy Services" reached Tier 1 with no website on its
+ * listing — no domain, so nothing for the domain guard to match. It raises a flag and nothing more.
+ */
+describe("nameMatchesChain", () => {
+  it("recognises a chain that leads with its brand", () => {
+    expect(nameMatchesChain("Office Depot Print & Copy Services")).toBe("officedepot.com");
+    expect(nameMatchesChain("Hobby Lobby")).toBe("hobbylobby.com");
+    expect(nameMatchesChain("Target Optical")).toBe("targetoptical.com");
+  });
+
+  /**
+   * The whole reason this only ever flags. Every one of these is a plausible independent business,
+   * and excluding on this signal would silence them.
+   */
+  it("does not match an independent that merely mentions a chain later", () => {
+    expect(nameMatchesChain("Braids Near Target")).toBeNull();
+    expect(nameMatchesChain("Prints Next To Staples")).toBeNull();
+  });
+
+  it("handles punctuation and spacing the way a listing writes it", () => {
+    expect(nameMatchesChain("OFFICE DEPOT")).toBe("officedepot.com");
+    expect(nameMatchesChain("office-depot print")).toBe("officedepot.com");
+  });
+
+  it("returns null for an ordinary local business", () => {
+    expect(nameMatchesChain("Kirra's Braids")).toBeNull();
+    expect(nameMatchesChain("Braider Zee Beauty Supply")).toBeNull();
+    expect(nameMatchesChain("")).toBeNull();
+    expect(nameMatchesChain(null)).toBeNull();
   });
 });

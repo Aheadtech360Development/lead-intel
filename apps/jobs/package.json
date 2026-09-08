@@ -7,7 +7,10 @@
     "./analyse": "./trigger/analyse-run.ts",
     "./discovery": "./trigger/discovery.ts",
     "./enrich": "./trigger/enrich-run.ts",
-    "./categorise": "./trigger/categorise.ts"
+    "./categorise": "./trigger/categorise.ts",
+    "./audit-site": "./trigger/audit-site.ts",
+    "./audit-site-run": "./trigger/audit-site-run.ts",
+    "./score": "./trigger/score-run.ts"
   },
   "scripts": {
     "dev": "trigger dev",
@@ -21,10 +24,13 @@
     "@lead-intel/providers": "0.1.0",
     "@lead-intel/shared": "0.1.0",
     "@trigger.dev/sdk": "4.5.16",
+    "cheerio": "^1.2.0",
+    "playwright": "1.57.0",
     "drizzle-orm": "^0.45.2"
   },
   "devDependencies": {
-    "trigger.dev": "^4.5.16",
+    "@trigger.dev/build": "4.5.16",
+    "trigger.dev": "4.5.16",
     "typescript": "^5.6.3"
   }
 }

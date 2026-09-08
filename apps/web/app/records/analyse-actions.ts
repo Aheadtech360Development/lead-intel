@@ -3,6 +3,8 @@
 import type { analyseRunTask } from "@lead-intel/jobs/analyse";
 import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
+import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
+import { failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -30,19 +32,40 @@ export async function analyseUnscored(formData: FormData): Promise<void> {
   const businessIds = formData.getAll("id").map(String).filter(Boolean);
   const back = String(formData.get("back") ?? "/records");
 
+  // Created before the enqueue, so the operator sees the job the instant they are redirected —
+  // including the stretch where it is queued behind something else and no worker has touched it.
+  const jobRunId = await startJobRun(supabase, {
+    kind: "analyse-run",
+    label:
+      businessIds.length > 0
+        ? `Reading ${businessIds.length} ${businessIds.length === 1 ? "website" : "websites"}`
+        : "Reading every website not yet analysed",
+    total: businessIds.length > 0 ? businessIds.length : null,
+  });
+
+  // Checked before the SDK is called. A missing key otherwise surfaces as an SDK error nobody can
+  // act on, and a *development* key on the live site is worse: it is accepted, the job is queued
+  // into an environment whose only worker is a laptop, and nothing ever runs or complains. See
+  // lib/enqueue.ts.
+  const blocked = enqueueBlockedBecause();
+  if (blocked.blocked) {
+    await failJobRun(supabase, jobRunId, blocked.why);
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(blocked.why)}`);
+  }
+
   try {
     // Categorised as well as analysed, so this button leaves a business in the same state an import
     // or a search would. It reads stored text and costs nothing, and a business that has just been
     // read for the first time is exactly the one whose category was previously unknowable.
-    await tasks.trigger<typeof analyseRunTask>("analyse-run", { businessIds, categoriseAll: true });
+    await tasks.trigger<typeof analyseRunTask>("analyse-run", { businessIds, categoriseAll: true, jobRunId });
   } catch (err) {
+    await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     // Surfaced rather than swallowed. An operator who pressed "Analyse" and saw a cheerful message
     // while nothing ran would wait for scores that were never coming — the same failure the
     // discovery and enrich flows both take care to avoid.
     redirect(
       `${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(
-        `Could not start the analysis: ${err instanceof Error ? err.message : String(err)}. ` +
-          `Nothing was changed. This usually means the background worker is not running.`,
+        explainEnqueueFailure(err),
       )}`,
     );
   }
@@ -77,9 +100,25 @@ export async function refreshWebsiteText(formData: FormData): Promise<void> {
 
   const back = String(formData.get("back") ?? "/categories");
 
+  const jobRunId = await startJobRun(supabase, {
+    kind: "analyse-run",
+    label: "Re-reading the websites whose text is missing",
+  });
+
+  // Checked before the SDK is called. A missing key otherwise surfaces as an SDK error nobody can
+  // act on, and a *development* key on the live site is worse: it is accepted, the job is queued
+  // into an environment whose only worker is a laptop, and nothing ever runs or complains. See
+  // lib/enqueue.ts.
+  const blocked = enqueueBlockedBecause();
+  if (blocked.blocked) {
+    await failJobRun(supabase, jobRunId, blocked.why);
+    redirect(`${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(blocked.why)}`);
+  }
+
   try {
     await tasks.trigger<typeof analyseRunTask>("analyse-run", {
       businessIds: [],
+      jobRunId,
       refreshMissingField: "site_text",
       // Sorted afterwards, because the whole reason for re-reading is that the rules had nothing to
       // read. Re-reading and then not re-sorting would leave the operator looking at the same empty
@@ -89,8 +128,7 @@ export async function refreshWebsiteText(formData: FormData): Promise<void> {
   } catch (err) {
     redirect(
       `${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(
-        `Could not start the re-read: ${err instanceof Error ? err.message : String(err)}. ` +
-          `Nothing was changed. This usually means the background worker is not running.`,
+        explainEnqueueFailure(err),
       )}`,
     );
   }

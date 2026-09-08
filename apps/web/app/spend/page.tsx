@@ -2,7 +2,7 @@ import { ENRICHMENT_DEFINITIONS, ENRICHMENT_ORDER } from "@lead-intel/shared";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
-import { AppShell, Badge, InfoBox, Note, Panel, SectionHeading, StatCard, TD, Th } from "../ui";
+import { AppShell, Badge, InfoBox, Money, Note, Panel, SectionHeading, StatCard, TD, Th } from "../ui";
 
 /**
  * What every kind of data costs, what is free, and what has actually been spent.
@@ -87,13 +87,24 @@ export default async function SpendPage() {
       }
     >
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
-        <StatCard icon="💳" tone="money" value={`$${(spentCents / 100).toFixed(2)}`} label="Spent, all time" explain="From the ledger. Written before every paid call." />
-        <StatCard icon="🧾" value={(calls ?? []).length} label="Paid calls made" explain="Each one is one business, one source." />
+        <StatCard
+          icon="💳"
+          tone="money"
+          value={<Money cents={spentCents} free="nothing yet" />}
+          label="Total spent with every provider, all time"
+          explain="Counted from the ledger, which is written before each paid call rather than after. It cannot flatter itself."
+        />
+        <StatCard
+          icon="🧾"
+          value={(calls ?? []).length}
+          label="Paid calls made"
+          explain="One call is one business and one kind of data. A repeat of the same purchase is not charged again."
+        />
         <StatCard
           icon="🏢"
-          value={businesses > 0 ? `$${(spentCents / 100 / businesses).toFixed(3)}` : "—"}
-          label="Average per business"
-          explain={`Across all ${businesses} businesses, including the ones nothing was bought for.`}
+          value={businesses > 0 ? <Money cents={spentCents / businesses} free="nothing yet" /> : "—"}
+          label="Average cost of one business"
+          explain={`Total spend divided across all ${businesses} businesses, including the ones nothing was bought for.`}
         />
         <StatCard icon="🎁" tone="good" value={FREE_SOURCES.length} label="Things that cost nothing" explain="Listed below. This is the bulk of the system." />
       </div>
@@ -103,13 +114,13 @@ export default async function SpendPage() {
         {FREE_SOURCES.map((s) => (
           <div key={s.name} className="card" data-tone="good" style={{ padding: "14px 16px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 5 }}>
-              <span aria-hidden style={{ fontSize: 17 }}>
+              <span aria-hidden style={{ fontSize: 18.5 }}>
                 {s.icon}
               </span>
-              <span style={{ fontWeight: 700, fontSize: 14.5 }}>{s.name}</span>
+              <span style={{ fontWeight: 700, fontSize: 16 }}>{s.name}</span>
               <Badge tone="good">free</Badge>
             </div>
-            <div style={{ fontSize: 13.3, color: "var(--ink-3)", lineHeight: 1.5 }}>{s.what}</div>
+            <div style={{ fontSize: 14.5, color: "var(--ink-3)", lineHeight: 1.5 }}>{s.what}</div>
           </div>
         ))}
       </div>
@@ -118,15 +129,19 @@ export default async function SpendPage() {
         title="Paid — bought one business at a time"
         hint="Nothing here happens on its own. You tick businesses on the leads list, see the price, and confirm."
       />
-      <Panel tone="money" title="What each one costs" hint="Rates are per business unless the note says otherwise.">
+      <Panel
+        tone="money"
+        title="What each kind of data costs, and who bills it"
+        hint="Every rate is for one business. The provider named beside each one is the company that actually charges the money."
+      >
         <table className="tbl">
           <thead>
             <tr>
               <Th label="Data" />
               <Th label="What you get" />
-              <Th label="Per business" width={120} />
-              <Th label={`All ${businesses}`} explain="If you bought it for everyone" width={110} />
-              <Th label="Ready?" width={110} />
+              <Th label="Cost for one business" width={130} />
+              <Th label={`Cost for all ${businesses}`} explain="If you bought it for every business on the list" width={130} />
+              <Th label="Can it be bought?" width={130} />
             </tr>
           </thead>
           <tbody>
@@ -136,21 +151,24 @@ export default async function SpendPage() {
                 <tr key={id}>
                   <td style={{ ...TD, fontWeight: 650 }}>
                     {d.label}
-                    <div style={{ fontSize: 13, color: "var(--ink-3)", fontWeight: 400 }}>{d.provider}</div>
+                    <div style={{ fontSize: 14.5, color: "var(--ink-3)", fontWeight: 400 }}>{d.provider}</div>
                   </td>
-                  <td style={{ ...TD, fontSize: 13.4, color: "var(--ink-2)" }}>
+                  <td style={{ ...TD, fontSize: 14.5, color: "var(--ink-2)" }}>
                     {d.describes}
                     {d.warning ? (
-                      <div style={{ fontSize: 13, color: "var(--warn-ink)", marginTop: 5, lineHeight: 1.45 }}>
+                      <div style={{ fontSize: 14.5, color: "var(--warn-ink)", marginTop: 5, lineHeight: 1.45 }}>
                         ⚠ {d.warning}
                       </div>
                     ) : null}
                   </td>
-                  <td style={{ ...TD, fontVariantNumeric: "tabular-nums", fontWeight: 650 }}>
-                    ${(d.costCents / 100).toFixed(4).replace(/0+$/, "").replace(/\.$/, ".00")}
+                  {/* Sub-cent amounts are shown in cents, not as a rounded "$0.00". A quarter of a
+                      cent is not free, and calling it free is how 160 Instagram lookups were once
+                      recorded as costing nothing. */}
+                  <td style={{ ...TD, fontVariantNumeric: "tabular-nums", fontWeight: 700, color: "var(--money-ink)" }}>
+                    <Money cents={d.costCents} />
                   </td>
-                  <td style={{ ...TD, fontVariantNumeric: "tabular-nums", color: "var(--ink-3)" }}>
-                    ${((d.costCents * businesses) / 100).toFixed(2)}
+                  <td style={{ ...TD, fontVariantNumeric: "tabular-nums", color: "var(--ink-2)", fontWeight: 650 }}>
+                    <Money cents={d.costCents * businesses} />
                   </td>
                   <td style={TD}>
                     {d.requiresEnvVar === null ? (
@@ -182,7 +200,7 @@ export default async function SpendPage() {
                 <Th label="What was bought" />
                 <Th label="Calls" width={90} />
                 <Th label="Failed" explain="Charged, but returned nothing" width={90} />
-                <Th label="Cost" width={110} />
+                <Th label="Total paid" explain="Everything spent on this kind of call" width={120} />
               </tr>
             </thead>
             <tbody>
@@ -195,8 +213,8 @@ export default async function SpendPage() {
                     <td style={{ fontVariantNumeric: "tabular-nums", color: v.failed > 0 ? "var(--warn-ink)" : "var(--ink-3)" }}>
                       {v.failed}
                     </td>
-                    <td style={{ fontVariantNumeric: "tabular-nums", fontWeight: 650 }}>
-                      {v.cents === 0 ? "free" : `$${(v.cents / 100).toFixed(2)}`}
+                    <td style={{ fontVariantNumeric: "tabular-nums", fontWeight: 700, color: v.cents === 0 ? "var(--good-ink)" : "var(--money-ink)" }}>
+                      <Money cents={v.cents} />
                     </td>
                   </tr>
                 ))}
@@ -242,4 +260,7 @@ const ENDPOINT_LABELS: Record<string, string> = {
   "apify.metaads": "Facebook & Instagram ads",
   "lusha.contact": "Owner's mobile number",
   "dataforseo.traffic": "Website traffic estimate",
+  // One row for every page the model has judged, across every business. Grouped rather than
+  // listed per page, because a few thousand identical rows is not a ledger anybody reads.
+  "critique-page": "The model's read on a website page",
 };

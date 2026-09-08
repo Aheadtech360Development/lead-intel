@@ -179,6 +179,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
 
   return (
     <AppShell
+      autoRefresh={false}
       current="categories"
       email={typeof claims?.email === "string" ? claims.email : null}
       signOutAction={signOut}
@@ -204,7 +205,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
             reloaded a page that looked identical and said nothing. There is no way to tell that
             apart from a save that failed — and the operator reasonably read it as one. */}
         {params.saved && (
-          <div style={{ ...PANEL, padding: "13px 16px", borderColor: "var(--good)", fontSize: 14 }}>
+          <div style={{ ...PANEL, padding: "13px 16px", borderColor: "var(--good)", fontSize: 15.5 }}>
             <strong>Saved.</strong> The rules table above shows it. Nothing is re-sorted until you
             press <strong>Apply</strong> — so change as many rules as you like first, then apply once.
           </div>
@@ -229,11 +230,11 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               background: "var(--warn-bg)",
             }}
           >
-            <h3 style={{ margin: "0 0 7px", fontSize: 16.5 }}>
+            <h3 style={{ margin: "0 0 7px", fontSize: 18 }}>
               ⚠ Your <span style={{ color: "var(--brand)" }}>🌐 website</span> rules have almost
               nothing to read yet
             </h3>
-            <p style={{ margin: "0 0 10px", fontSize: 14, lineHeight: 1.6, maxWidth: 780 }}>
+            <p style={{ margin: "0 0 10px", fontSize: 15.5, lineHeight: 1.6, maxWidth: 780 }}>
               The crawler keeps a short digest of what each site says, and rules match against it —
               but it only started keeping that digest recently.{" "}
               <strong>
@@ -243,7 +244,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               , so for those a website rule can currently only see their web address, not a single
               word from their pages.
             </p>
-            <p style={{ margin: "0 0 13px", fontSize: 14, lineHeight: 1.6, maxWidth: 780 }}>
+            <p style={{ margin: "0 0 13px", fontSize: 15.5, lineHeight: 1.6, maxWidth: 780 }}>
               This is <strong>not</strong> what the &ldquo;Analyse them now&rdquo; button on the leads
               list fixes — that one looks for businesses nobody has ever analysed, and there are
               none. Re-reading is its own thing, and this is the button for it.
@@ -253,7 +254,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               <button className="btn" type="submit">
                 Re-read {textMissing.toLocaleString()} websites — free
               </button>
-              <span style={{ fontSize: 13, color: "var(--ink-2)" }}>
+              <span style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
                 Costs nothing. Takes a few minutes. Re-sorts everything through your rules afterwards.
               </span>
             </form>
@@ -273,8 +274,8 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
 
         {all.length === 0 && (
           <div style={{ ...PANEL, padding: "40px 24px", textAlign: "center" }}>
-            <h3 style={{ fontSize: 19, margin: "0 0 8px" }}>No rules yet</h3>
-            <p style={{ maxWidth: 560, margin: "0 auto 16px", fontSize: 14, color: "var(--ink-3)", lineHeight: 1.55 }}>
+            <h3 style={{ fontSize: 20.5, margin: "0 0 8px" }}>No rules yet</h3>
+            <p style={{ maxWidth: 560, margin: "0 auto 16px", fontSize: 15.5, color: "var(--ink-3)", lineHeight: 1.55 }}>
               Start from a set written for printing and apparel — DTF, screen printing, embroidery,
               apparel brands, and one example that uses the website and Instagram together — then
               change them to suit what you sell. Nothing is applied until you press Apply.
@@ -310,7 +311,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                       <td style={{ ...TD, fontVariantNumeric: "tabular-nums" }}>{r.priority}</td>
                       <td style={TD}>
                         <strong>{r.name}</strong>
-                        {!r.enabled && <div style={{ fontSize: 13, color: "var(--ink-3)" }}>turned off</div>}
+                        {!r.enabled && <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>turned off</div>}
                         {r.require_all && (
                           <div style={{ marginTop: 4 }}>
                             <Badge tone="warn">must match every box</Badge>
@@ -321,7 +322,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                         {r.category}
                         {r.subcategory ? <span style={{ color: "var(--ink-3)" }}> › {r.subcategory}</span> : null}
                       </td>
-                      <td style={{ ...TD, fontSize: 13 }}>
+                      <td style={{ ...TD, fontSize: 14.5 }}>
                         <Group
                           icon="•"
                           tone="plain"
@@ -357,7 +358,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                         )}
                       </td>
                       <td style={TD}>
-                        <Link href={`/categories?edit=${r.id}`} style={{ fontSize: 13.5, marginRight: 10 }}>
+                        <Link href={`/categories?edit=${r.id}`} style={{ fontSize: 15, marginRight: 10 }}>
                           Edit
                         </Link>
                         <form action={deleteRule} style={{ display: "inline" }}>
@@ -368,7 +369,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                               background: "none",
                               border: 0,
                               color: "var(--bad)",
-                              fontSize: 13.5,
+                              fontSize: 15,
                               cursor: "pointer",
                               padding: 0,
                             }}
@@ -388,7 +389,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                   Apply these rules to every business
                 </button>
               </form>
-              <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+              <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                 Free. A business that no longer matches any rule has its category removed rather than
                 keeping a stale one.
               </span>
@@ -421,7 +422,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                         padding: "7px 13px",
                         border: "1px solid var(--rule-2)",
                         borderRadius: 999,
-                        fontSize: 13.5,
+                        fontSize: 15,
                         background: "var(--social-bg)",
                         color: "var(--ink)",
                         textDecoration: "none",
@@ -437,7 +438,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                     padding: "7px 13px",
                     border: "1px dashed var(--rule-2)",
                     borderRadius: 999,
-                    fontSize: 13.5,
+                    fontSize: 15,
                     color: "var(--ink-3)",
                   }}
                 >
@@ -468,7 +469,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               <button className="btn" type="submit">
                 Suggest a rule
               </button>
-              <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+              <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                 About a third of a cent. Nothing is saved — it fills the form and you edit it.
               </span>
             </div>
@@ -477,11 +478,11 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
 
         {aiUnderstood !== null && (
           <div style={{ ...PANEL, padding: "15px 18px", borderColor: "var(--info)", background: "var(--info-bg)" }}>
-            <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--info)" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--info)" }}>
               What the model understood
             </div>
-            <div style={{ fontSize: 14.5, marginTop: 5, lineHeight: 1.55 }}>{aiUnderstood}</div>
-            <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 7 }}>
+            <div style={{ fontSize: 16, marginTop: 5, lineHeight: 1.55 }}>{aiUnderstood}</div>
+            <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 7 }}>
               If that is not what you meant, the rest of the suggestion is wrong too — rewrite the
               description and ask again rather than fixing the words by hand.
             </div>
@@ -490,16 +491,16 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
 
         {risky.length > 0 && (
           <div style={{ ...PANEL, padding: "15px 18px", borderColor: "var(--warn)", background: "var(--warn-bg)" }}>
-            <strong style={{ fontSize: 14.5 }}>⚠ {risky.length} of these words look too broad</strong>
+            <strong style={{ fontSize: 16 }}>⚠ {risky.length} of these words look too broad</strong>
             <div style={{ marginTop: 7, display: "grid", gap: 5 }}>
               {risky.map((r) => (
-                <div key={r.term} style={{ fontSize: 13.5 }}>
+                <div key={r.term} style={{ fontSize: 15 }}>
                   <strong>&ldquo;{r.term}&rdquo;</strong>{" "}
                   <span style={{ color: "var(--ink-2)" }}>— {r.why}</span>
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 13, color: "var(--ink-2)", marginTop: 8 }}>
+            <div style={{ fontSize: 14.5, color: "var(--ink-2)", marginTop: 8 }}>
               Checked mechanically, not by the model — a model asked to criticise its own answer
               usually agrees with itself. Look at the count below to see whether it actually matters.
             </div>
@@ -590,12 +591,12 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               />
               <Reasons terms={form.anyOf} reasons={aiReasons} />
               <details style={{ marginTop: 10 }}>
-                <summary style={{ fontSize: 13, color: "var(--ink-3)", cursor: "pointer" }}>
+                <summary style={{ fontSize: 14.5, color: "var(--ink-3)", cursor: "pointer" }}>
                   Narrow &ldquo;anywhere&rdquo; to particular places
                 </summary>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginTop: 8 }}>
                   {CATEGORY_SOURCES.map((s) => (
-                    <label key={s} style={{ fontSize: 13.5, display: "flex", gap: 6, alignItems: "center" }}>
+                    <label key={s} style={{ fontSize: 15, display: "flex", gap: 6, alignItems: "center" }}>
                       <input
                         type="checkbox"
                         name="sources"
@@ -606,7 +607,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                     </label>
                   ))}
                 </div>
-                <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 6 }}>
+                <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 6 }}>
                   Tick none to look everywhere, which is usually what you want. This only affects the
                   &ldquo;anywhere&rdquo; box — the other two are already pinned to one side.
                 </div>
@@ -621,11 +622,11 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                 padding: "13px 15px",
               }}
             >
-              <label style={{ fontSize: 14.5, fontWeight: 600, display: "flex", gap: 9, alignItems: "flex-start" }}>
+              <label style={{ fontSize: 16, fontWeight: 600, display: "flex", gap: 9, alignItems: "flex-start" }}>
                 <input type="checkbox" name="requireAll" defaultChecked={form.requireAll} style={{ marginTop: 3 }} />
                 <span>
                   Must match <strong>every</strong> box I filled in
-                  <div style={{ fontWeight: 400, fontSize: 13, color: "var(--ink-2)", marginTop: 4, lineHeight: 1.55 }}>
+                  <div style={{ fontWeight: 400, fontSize: 14.5, color: "var(--ink-2)", marginTop: 4, lineHeight: 1.55 }}>
                     This is how you tie a website to an Instagram account. Off, the rule fires when
                     any one box hits — &ldquo;embroidery on the site <em>or</em> a clothing brand on
                     Instagram&rdquo;. On, both have to be true of the same business, which is a much
@@ -648,7 +649,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               </Field>
             </div>
 
-            <label style={{ fontSize: 14, display: "flex", gap: 8, alignItems: "center" }}>
+            <label style={{ fontSize: 15.5, display: "flex", gap: 8, alignItems: "center" }}>
               <input type="checkbox" name="enabled" defaultChecked={editing ? editing.enabled : true} />
               Use this rule
             </label>
@@ -665,11 +666,11 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
                 {editing ? "Save changes" : "Add the rule"}
               </button>
               {(editing || draft) && (
-                <Link href="/categories" style={{ fontSize: 14 }}>
+                <Link href="/categories" style={{ fontSize: 15.5 }}>
                   Start a fresh rule
                 </Link>
               )}
-              <span style={{ fontSize: 13, color: "var(--ink-3)", flexBasis: "100%" }}>
+              <span style={{ fontSize: 14.5, color: "var(--ink-3)", flexBasis: "100%" }}>
                 Preview saves nothing and costs nothing — it matches your draft against all{" "}
                 {(total ?? 0).toLocaleString()} businesses and shows you what it would take.
               </span>
@@ -688,7 +689,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
             past them to reach the rules. */}
         <SectionHeading title="How this works" hint="Open these if you need them; they are here for reference, not for every visit." />
         <details style={{ marginBottom: 14 }}>
-          <summary style={{ cursor: "pointer", fontSize: 14.5, fontWeight: 600, padding: "6px 0" }}>
+          <summary style={{ cursor: "pointer", fontSize: 16, fontWeight: 600, padding: "6px 0" }}>
             📖 What a category is, and where it shows up
           </summary>
           <InfoBox tone="social">
@@ -737,7 +738,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
         {/* The question the screen could not previously answer: does this run by itself, or do I
             have to remember to? Both, and it matters which is which. */}
         <details style={{ marginBottom: 18 }}>
-          <summary style={{ cursor: "pointer", fontSize: 14.5, fontWeight: 600, padding: "6px 0" }}>
+          <summary style={{ cursor: "pointer", fontSize: 16, fontWeight: 600, padding: "6px 0" }}>
             ⏱ When does the sorting actually happen?
           </summary>
           <InfoBox tone="brand">
@@ -760,7 +761,7 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
               padding: "11px 13px",
               background: "var(--warn-bg)",
               borderRadius: 5,
-              fontSize: 13.5,
+              fontSize: 15,
               lineHeight: 1.6,
             }}
           >
@@ -793,8 +794,8 @@ function PreviewPanel({ preview, name }: { preview: RulePreview; name: string })
   if (preview.impossible) {
     return (
       <div style={{ ...PANEL, padding: "16px 18px", borderColor: "var(--warn)", background: "var(--warn-bg)" }}>
-        <strong style={{ fontSize: 15 }}>This rule cannot match anything yet</strong>
-        <div style={{ fontSize: 14, color: "var(--ink-2)", marginTop: 5 }}>{preview.impossible}</div>
+        <strong style={{ fontSize: 16.5 }}>This rule cannot match anything yet</strong>
+        <div style={{ fontSize: 15.5, color: "var(--ink-2)", marginTop: 5 }}>{preview.impossible}</div>
       </div>
     );
   }
@@ -813,21 +814,21 @@ function PreviewPanel({ preview, name }: { preview: RulePreview; name: string })
   return (
     <div style={{ ...PANEL, padding: 0, borderColor: `var(--${tone})`, overflow: "hidden" }}>
       <div style={{ background: `var(--${tone}-bg)`, padding: "15px 18px" }}>
-        <div style={{ fontSize: 17, fontWeight: 700 }}>
+        <div style={{ fontSize: 18.5, fontWeight: 700 }}>
           {name} would catch{" "}
           <span style={{ color: `var(--${tone})` }}>
             {preview.total.toLocaleString()} of {preview.outOf.toLocaleString()}
           </span>{" "}
           businesses
         </div>
-        <div style={{ fontSize: 13.5, color: "var(--ink-2)", marginTop: 4, lineHeight: 1.55 }}>{verdict}</div>
-        <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 6 }}>
+        <div style={{ fontSize: 15, color: "var(--ink-2)", marginTop: 4, lineHeight: 1.55 }}>{verdict}</div>
+        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 6 }}>
           Nothing has been saved. This is your draft matched against your real data.
         </div>
       </div>
 
       {preview.stolenFrom.length > 0 && (
-        <div style={{ ...TD, background: "var(--surface-2)", fontSize: 13.5 }}>
+        <div style={{ ...TD, background: "var(--surface-2)", fontSize: 15 }}>
           <strong>It would take these from rules you already have:</strong>{" "}
           {preview.stolenFrom.map((s) => `${s.count} from “${s.ruleName}”`).join(", ")}. Whether that
           happens depends on the Order number — lower wins.
@@ -841,7 +842,7 @@ function PreviewPanel({ preview, name }: { preview: RulePreview; name: string })
               <Link href={`/records/${m.id}`} style={{ flex: "1 1 220px", fontWeight: 600 }}>
                 {m.name}
               </Link>
-              <span style={{ flex: "1 1 260px", fontSize: 13, color: "var(--ink-3)" }}>
+              <span style={{ flex: "1 1 260px", fontSize: 14.5, color: "var(--ink-3)" }}>
                 matched <strong style={{ color: "var(--ink-2)" }}>&ldquo;{m.term}&rdquo;</strong> in{" "}
                 {CATEGORY_SOURCE_LABELS[m.where as keyof typeof CATEGORY_SOURCE_LABELS] ?? m.where}
               </span>
@@ -869,7 +870,7 @@ function Reasons({ terms, reasons }: { terms: string[]; reasons: Record<string, 
   return (
     <div style={{ marginTop: 9, display: "grid", gap: 4 }}>
       {explained.map((t) => (
-        <div key={t} style={{ fontSize: 13, color: "var(--ink-3)", lineHeight: 1.5 }}>
+        <div key={t} style={{ fontSize: 14.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
           <strong style={{ color: "var(--ink-2)" }}>{t}</strong> — {reasons[t]}
         </div>
       ))}
@@ -881,8 +882,8 @@ function Reasons({ terms, reasons }: { terms: string[]; reasons: Record<string, 
 function Where({ where, how }: { where: string; how: string }) {
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap" }}>
-      <strong style={{ flex: "0 0 190px", fontSize: 13.5 }}>{where}</strong>
-      <span style={{ flex: 1, minWidth: 240, fontSize: 13.5, color: "var(--ink-2)" }}>{how}</span>
+      <strong style={{ flex: "0 0 190px", fontSize: 15 }}>{where}</strong>
+      <span style={{ flex: 1, minWidth: 240, fontSize: 15, color: "var(--ink-2)" }}>{how}</span>
     </div>
   );
 }
@@ -906,11 +907,11 @@ function TargetBox({
   return (
     <div style={{ border: `1px solid ${border}`, borderRadius: 6, overflow: "hidden" }}>
       <div style={{ background: bg, padding: "10px 14px" }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700 }}>
+        <div style={{ fontSize: 16, fontWeight: 700 }}>
           <span style={{ marginRight: 7 }}>{icon}</span>
           {title}
         </div>
-        <div style={{ fontSize: 13, color: "var(--ink-2)", marginTop: 3, lineHeight: 1.5 }}>{explain}</div>
+        <div style={{ fontSize: 14.5, color: "var(--ink-2)", marginTop: 3, lineHeight: 1.5 }}>{explain}</div>
       </div>
       <div style={{ padding: "12px 14px" }}>{children}</div>
     </div>
@@ -947,10 +948,10 @@ function Fig({ value, label, tone }: { value: number; label: string; tone: "bran
   const colour = tone === "plain" ? "var(--ink)" : `var(--${tone})`;
   return (
     <div style={{ ...PANEL, marginBottom: 0, padding: "14px 16px", flex: "1 1 170px", minWidth: 160 }}>
-      <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1.1, color: colour, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.1, color: colour, fontVariantNumeric: "tabular-nums" }}>
         {value.toLocaleString()}
       </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
+      <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
     </div>
   );
 }
@@ -958,7 +959,7 @@ function Fig({ value, label, tone }: { value: number; label: string; tone: "bran
 const INPUT: React.CSSProperties = {
   width: "100%",
   padding: "9px 11px",
-  fontSize: 14.5,
+  fontSize: 16,
   border: "1px solid var(--rule-2)",
   borderRadius: 3,
   background: "var(--surface)",
@@ -968,8 +969,8 @@ const INPUT: React.CSSProperties = {
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, marginBottom: 3 }}>{label}</span>
-      {hint ? <span style={{ display: "block", fontSize: 13, color: "var(--ink-3)", marginBottom: 5 }}>{hint}</span> : null}
+      <span style={{ display: "block", fontSize: 15, fontWeight: 600, marginBottom: 3 }}>{label}</span>
+      {hint ? <span style={{ display: "block", fontSize: 14.5, color: "var(--ink-3)", marginBottom: 5 }}>{hint}</span> : null}
       {children}
     </label>
   );

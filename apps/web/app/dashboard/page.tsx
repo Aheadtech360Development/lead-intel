@@ -384,7 +384,7 @@ export default async function DashboardPage() {
           title="Your categories"
           hint="Sorted by rules you wrote. Instagram has no second level, so this is yours to define."
           right={
-            <Link href="/categories" style={{ fontSize: 13 }}>
+            <Link href="/categories" style={{ fontSize: 14.5 }}>
               Edit rules
             </Link>
           }
@@ -420,9 +420,9 @@ export default async function DashboardPage() {
           </div>
           {(batchRows ?? []).length > 0 && (
             <div style={{ padding: "4px 18px 14px" }}>
-              <div style={{ fontSize: 13, color: "var(--ink-3)", marginBottom: 5 }}>Files you have imported</div>
+              <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginBottom: 5 }}>Files you have imported</div>
               {(batchRows ?? []).slice(0, 6).map((b) => (
-                <div key={b.id} style={{ fontSize: 13, padding: "2px 0" }}>
+                <div key={b.id} style={{ fontSize: 14.5, padding: "2px 0" }}>
                   <Link href={`/records/imports/${b.id}`}>{b.filename ?? "an uploaded file"}</Link>{" "}
                   <span style={{ color: "var(--ink-3)" }}>— {b.row_count} rows</span>
                 </div>
@@ -437,10 +437,10 @@ export default async function DashboardPage() {
 
         <Panel tone="money" title="What it has cost" hint="From the ledger, written before every paid call — not an estimate.">
           <div style={{ padding: "14px 18px 4px" }}>
-            <div style={{ fontSize: 34, fontWeight: 750, lineHeight: 1.05, color: "var(--money-ink)" }}>
+            <div style={{ fontSize: 38, fontWeight: 750, lineHeight: 1.05, color: "var(--money-ink)" }}>
               ${(spentCents / 100).toFixed(2)}
             </div>
-            <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 2 }}>total, all time</div>
+            <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2 }}>total, all time</div>
           </div>
           <table className="tbl" style={{ marginTop: 8 }}>
             <tbody>

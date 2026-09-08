@@ -49,8 +49,8 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
     >
 
       <>
-        <h1 style={{ fontSize: 25, margin: "0 0 4px" }}>{batch.filename ?? "an uploaded file"}</h1>
-        <p style={{ color: "var(--ink-3)", margin: "0 0 20px", fontSize: 14 }}>
+        <h1 style={{ fontSize: 27, margin: "0 0 4px" }}>{batch.filename ?? "an uploaded file"}</h1>
+        <p style={{ color: "var(--ink-3)", margin: "0 0 20px", fontSize: 15.5 }}>
           Uploaded {new Date(batch.created_at).toLocaleString("en-GB")} ·{" "}
           {batch.status === "imported" ? "imported" : batch.status === "discarded" ? "discarded" : "never confirmed"}
         </p>
@@ -68,7 +68,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
           hint="Chosen at the moment of import, so it is a record of the decision rather than a guess from what exists now."
         >
           {plan === null ? (
-            <div style={{ padding: "14px 18px", fontSize: 14, color: "var(--ink-3)", lineHeight: 1.6 }}>
+            <div style={{ padding: "14px 18px", fontSize: 15.5, color: "var(--ink-3)", lineHeight: 1.6 }}>
               Not recorded. This file was imported before the product asked what to do with a file —
               it was analysed and scored, which is what every import did then. Files imported from
               now on carry their own answer here.
@@ -86,13 +86,13 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
                     : "Not asked for"
                 }
               />
-              <div style={{ ...TD, color: "var(--ink-3)", fontSize: 13 }}>
+              <div style={{ ...TD, color: "var(--ink-3)", fontSize: 14.5 }}>
                 ✕ Facebook / Instagram ads — never part of an import. Picked business by business.
               </div>
               {plan.note && (
                 <div style={{ ...TD }}>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginBottom: 2 }}>Your note</div>
-                  <div style={{ fontSize: 14.5 }}>{plan.note}</div>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginBottom: 2 }}>Your note</div>
+                  <div style={{ fontSize: 16 }}>{plan.note}</div>
                 </div>
               )}
             </>
@@ -140,7 +140,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
                 <span style={{ flex: "0 0 90px", color: "var(--ink-3)" }}>Row {m.row.rowNumber}</span>
                 <span style={{ flex: 1 }}>
                   <strong>{m.row.name}</strong>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                     matched &ldquo;{m.existingName}&rdquo; on their {m.matchedOn}
                   </div>
                 </span>
@@ -169,7 +169,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
                         {b.display_name}
                       </Link>
                     </td>
-                    <td style={{ ...TD, color: "var(--ink-3)", fontSize: 13.5 }}>
+                    <td style={{ ...TD, color: "var(--ink-3)", fontSize: 15 }}>
                       {[b.city, b.state].filter(Boolean).join(", ") || "Unknown"}
                     </td>
                     <td style={TD}>{b.tier ?? <span style={{ color: "var(--ink-3)" }}>—</span>}</td>
@@ -198,7 +198,7 @@ function Did({ on, label, note }: { on: boolean; label: string; note: string }) 
       </span>
       <span style={{ flex: 1, color: on ? "var(--ink)" : "var(--ink-3)" }}>
         {label}
-        <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 2 }}>{note}</div>
+        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2 }}>{note}</div>
       </span>
     </div>
   );
@@ -209,10 +209,10 @@ function Fig({ value, label, tone = "plain" }: { value: number; label: string; t
     tone === "accent" ? "var(--accent)" : tone === "warn" ? "var(--bad)" : tone === "muted" ? "var(--ink-3)" : "var(--ink)";
   return (
     <div style={{ ...PANEL, marginBottom: 0, padding: "14px 16px", flex: "1 1 165px", minWidth: 155 }}>
-      <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.1, color: colour, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.1, color: colour, fontVariantNumeric: "tabular-nums" }}>
         {value}
       </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
+      <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
     </div>
   );
 }

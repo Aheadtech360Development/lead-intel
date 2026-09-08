@@ -21,6 +21,8 @@ import {
 import { resolveSearchCenter, searchNicheAtPoint, type DiscoveredPlaceResult } from "@lead-intel/providers";
 import { PLACES_CENTER_LOOKUP_COST_CENTS, PLACES_TEXT_SEARCH_COST_CENTS } from "@lead-intel/shared";
 import { logger, task } from "@trigger.dev/sdk";
+import { getGooglePlacesApiKey } from "@lead-intel/providers";
+import { jobProgress } from "../src/job-progress.js";
 import { and, eq, sql } from "drizzle-orm";
 import { createDiscoveryRepo } from "../src/repo.js";
 import { analyseRunTask } from "./analyse-run.js";
@@ -44,9 +46,10 @@ type RunGridCellRow = typeof runGridCells.$inferSelect;
 export const discoveryTask = task({
   id: "discovery",
   maxDuration: 1800,
-  run: async (payload: { runId: string }) => {
+  run: async (payload: { runId: string; jobRunId?: string | null }) => {
     const db = createDbClient();
     const repo = createDiscoveryRepo(db);
+    const progress = jobProgress(db, payload.jobRunId);
 
     const [run] = await db.select().from(runs).where(eq(runs.id, payload.runId)).limit(1);
     if (!run) throw new Error(`run ${payload.runId} not found`);
@@ -56,6 +59,39 @@ export const discoveryTask = task({
 
     await db.update(runs).set({ status: "running", startedAt: new Date() }).where(eq(runs.id, run.id));
 
+    /**
+     * The key is checked before any work starts, not when the first search needs it.
+     *
+     * Without this the run marks itself "running", seeds a grid, and only then throws
+     * `GOOGLE_PLACES_API_KEY is not set` from somewhere three layers down — which is what a live
+     * production run actually did. The operator's report was "Trigger.dev ki kisi API key ko
+     * missing bata raha tha", and the message was accurate but arrived attached to a run that
+     * looked half-done and named no place to put the key.
+     *
+     * The environment variables belong to the **worker**, not to the website: Trigger.dev
+     * dashboard, Environment Variables, with the environment set to Production.
+     */
+    try {
+      getGooglePlacesApiKey();
+    } catch {
+      const why =
+        "This search cannot run: the worker has no GOOGLE_PLACES_API_KEY, so it cannot ask Google " +
+        "Maps for anything. Set it in the Trigger.dev dashboard under Environment Variables, with " +
+        "the environment set to Production. Nothing was searched and nothing was spent.";
+      await db
+        .update(runs)
+        .set({ status: "failed", finishedAt: new Date(), errors: { config: why } })
+        .where(eq(runs.id, run.id));
+      await progress.finish({ ok: false, detail: why });
+      logger.error("discovery not run", { why });
+      return;
+    }
+
+    // The total is genuinely unknown here: the grid splits itself wherever Google comes back
+    // full, so how many searches this will take is decided while it runs. The banner draws a
+    // moving stripe rather than inventing a denominator.
+    await progress.say(`Searching around ${run.location}`);
+
     // Anything that escapes the pipeline below marks the run "failed" with the reason before it
     // propagates to Trigger.dev. Without this the row keeps saying "running" forever after a
     // crash — which is exactly what the first live run did: the task died on a duplicate domain,
@@ -63,6 +99,16 @@ export const discoveryTask = task({
     // one. A step that died must never look like a step still working.
     try {
       await runPipeline(db, repo, run);
+
+      const [finished] = await db.select().from(runs).where(eq(runs.id, run.id)).limit(1);
+      const counters = (finished?.counters ?? {}) as Record<string, number>;
+      const spend = (finished?.spend ?? {}) as Record<string, number>;
+      await progress.finish({
+        ok: true,
+        detail:
+          `Found ${counters.businessesFound ?? 0} businesses across ${counters.cellsDone ?? 0} searches. ` +
+          `Cost ${((spend.totalCents ?? 0) / 100).toFixed(2)} dollars with Google Places.`,
+      });
     } catch (err) {
       await db
         .update(runs)
@@ -77,6 +123,7 @@ export const discoveryTask = task({
         })
         .where(eq(runs.id, run.id));
       await refreshRunAggregates(db, run.id);
+      await progress.finish({ ok: false, detail: `The search stopped: ${describeDbError(err)}` });
       throw err; // still surfaces in Trigger.dev's own run history for the full stack trace
     }
   },

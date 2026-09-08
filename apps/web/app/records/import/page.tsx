@@ -39,6 +39,7 @@ export default async function ImportPage({
 
   return (
     <AppShell
+      autoRefresh={false}
       current="import"
       title="Import a list"
       what="Upload a CSV and see exactly what would happen before anything is saved. Businesses you already have are recognised and merged, so importing the same file twice cannot create duplicates."
@@ -53,12 +54,12 @@ export default async function ImportPage({
           <>
             <Panel title="Choose your file">
               <form action={uploadImport} style={{ padding: "16px 18px" }}>
-                <input type="file" name="file" accept=".csv,text/csv" required style={{ fontSize: 14 }} />
+                <input type="file" name="file" accept=".csv,text/csv" required style={{ fontSize: 15.5 }} />
                 <div style={{ marginTop: 14 }}>
                   <button className="btn" type="submit">
                     Read the file
                   </button>
-                  <span style={{ marginLeft: 12, fontSize: 13, color: "var(--ink-3)" }}>
+                  <span style={{ marginLeft: 12, fontSize: 14.5, color: "var(--ink-3)" }}>
                     Nothing is saved yet.
                   </span>
                 </div>
@@ -70,7 +71,7 @@ export default async function ImportPage({
               hint="Only the business name is required. Column headings can be roughly anything sensible."
             >
               <div style={{ padding: "14px 18px" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 15.5 }}>
                   <tbody>
                     {[
                       ["Business name", "Required", "name · business · company · Company Name · shop"],
@@ -91,7 +92,7 @@ export default async function ImportPage({
                         >
                           {need}
                         </td>
-                        <td style={{ padding: "7px 0", color: "var(--ink-3)", fontSize: 13 }}>{aliases}</td>
+                        <td style={{ padding: "7px 0", color: "var(--ink-3)", fontSize: 14.5 }}>{aliases}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -167,7 +168,7 @@ export default async function ImportPage({
                     <span style={{ flex: "0 0 90px", color: "var(--ink-3)" }}>Row {m.row.rowNumber}</span>
                     <span style={{ flex: 1 }}>
                       <strong>{m.row.name}</strong>
-                      <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                         matches &ldquo;{m.existingName}&rdquo; on their {m.matchedOn}
                       </div>
                     </span>
@@ -187,7 +188,7 @@ export default async function ImportPage({
                     <span style={{ flex: "0 0 90px", color: "var(--ink-3)" }}>Row {d.row.rowNumber}</span>
                     <span style={{ flex: 1 }}>
                       <strong>{d.row.name}</strong>
-                      <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                         looks like &ldquo;{d.existingName}&rdquo;, which you already have in{" "}
                         {d.row.city ?? "the same town"}
                       </div>
@@ -213,7 +214,7 @@ export default async function ImportPage({
                     <span style={{ flex: "0 0 90px", color: "var(--ink-3)" }}>Row {s.row.rowNumber}</span>
                     <span style={{ flex: 1 }}>
                       <strong>{s.row.name}</strong>
-                      <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                         the website given is <strong>{s.matched}</strong> — the {s.kind}&rsquo;s own
                         address, shared by every location on it
                       </div>
@@ -237,7 +238,7 @@ export default async function ImportPage({
                     <span style={{ flex: "0 0 90px", color: "var(--ink-3)" }}>Row {row.rowNumber}</span>
                     <span style={{ flex: 1 }}>
                       <strong>{row.name}</strong>
-                      <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                         {[row.domain, row.phone, [row.city, row.state].filter(Boolean).join(", ")]
                           .filter(Boolean)
                           .join(" · ") || "name only"}
@@ -300,10 +301,10 @@ export default async function ImportPage({
               />
 
               <div style={{ ...PANEL, padding: "14px 16px" }}>
-                <label style={{ display: "block", fontSize: 13.5, fontWeight: 600, marginBottom: 3 }}>
+                <label style={{ display: "block", fontSize: 15, fontWeight: 600, marginBottom: 3 }}>
                   A note about this file — optional
                 </label>
-                <div style={{ fontSize: 13, color: "var(--ink-3)", marginBottom: 6 }}>
+                <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginBottom: 6 }}>
                   Where it came from, what it is, why you imported it. Shown on the file&rsquo;s page.
                 </div>
                 <input
@@ -312,7 +313,7 @@ export default async function ImportPage({
                   style={{
                     width: "100%",
                     padding: "9px 11px",
-                    fontSize: 14.5,
+                    fontSize: 16,
                     border: "1px solid var(--rule-2)",
                     borderRadius: 3,
                     background: "var(--surface)",
@@ -328,7 +329,7 @@ export default async function ImportPage({
                 <button className="btn-2 btn" type="submit" formAction={discardImport}>
                   Start over
                 </button>
-                <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                   Importing itself is free, and so is everything ticked above except Instagram —
                   which is priced on the next screen before anything is spent.
                 </span>
@@ -382,13 +383,13 @@ function Job({
         <input type="checkbox" name={name} defaultChecked={defaultChecked} style={{ width: 17, height: 17, marginTop: 3 }} />
         <span style={{ flex: 1 }}>
           <span style={{ display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-            <strong style={{ fontSize: 15.5 }}>
+            <strong style={{ fontSize: 17 }}>
               <span style={{ marginRight: 7 }}>{icon}</span>
               {title}
             </strong>
             <strong
               style={{
-                fontSize: 13.5,
+                fontSize: 15,
                 whiteSpace: "nowrap",
                 color: tone === "money" ? "var(--money)" : "var(--good)",
               }}
@@ -396,7 +397,7 @@ function Job({
               {price}
             </strong>
           </span>
-          <span style={{ display: "block", fontSize: 13.5, color: "var(--ink-2)", marginTop: 5, lineHeight: 1.55 }}>
+          <span style={{ display: "block", fontSize: 15, color: "var(--ink-2)", marginTop: 5, lineHeight: 1.55 }}>
             {describes}
           </span>
           {warning && (
@@ -408,7 +409,7 @@ function Job({
                 background: "var(--warn-bg)",
                 color: "var(--warn-ink)",
                 borderRadius: 4,
-                fontSize: 13,
+                fontSize: 14.5,
                 lineHeight: 1.5,
               }}
             >
@@ -436,9 +437,9 @@ function Summary({
     tone === "accent" ? "var(--accent)" : tone === "warn" ? "var(--bad)" : tone === "muted" ? "var(--ink-3)" : "var(--ink)";
   return (
     <div style={{ ...PANEL, marginBottom: 0, padding: "14px 16px", flex: "1 1 170px", minWidth: 160 }}>
-      <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.1, color: colour }}>{value}</div>
-      <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
-      {hint ? <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 3 }}>{hint}</div> : null}
+      <div style={{ fontSize: 31, fontWeight: 700, lineHeight: 1.1, color: colour }}>{value}</div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
+      {hint ? <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 3 }}>{hint}</div> : null}
     </div>
   );
 }

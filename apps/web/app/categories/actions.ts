@@ -15,6 +15,8 @@ import type { categoriseRunTask } from "@lead-intel/jobs/categorise";
 import { tasks } from "@trigger.dev/sdk";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
+import { failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -212,7 +214,10 @@ export async function deleteRule(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (id) {
     const supabase = await createClient();
-    await supabase.from("category_rules").delete().eq("id", id);
+    const { error: deleteError } = await supabase.from("category_rules").delete().eq("id", id);
+  if (deleteError) {
+    redirect(`/categories?error=${encodeURIComponent(`Could not delete the rule: ${deleteError.message}`)}`);
+  }
   }
   revalidatePath("/categories");
   redirect("/categories?saved=1");
@@ -260,13 +265,28 @@ export async function applyRules(): Promise<void> {
   const { data } = await supabase.auth.getClaims();
   if (typeof data?.claims?.sub !== "string") redirect("/categories?error=You+are+not+signed+in.");
 
+  const jobRunId = await startJobRun(supabase, {
+    kind: "categorise-run",
+    label: "Sorting every business into its category",
+  });
+
+  // Checked before the SDK is called. A missing key otherwise surfaces as an SDK error nobody can
+  // act on, and a *development* key on the live site is worse: it is accepted, the job is queued
+  // into an environment whose only worker is a laptop, and nothing ever runs or complains. See
+  // lib/enqueue.ts.
+  const blocked = enqueueBlockedBecause();
+  if (blocked.blocked) {
+    await failJobRun(supabase, jobRunId, blocked.why);
+    redirect(`/categories?error=${encodeURIComponent(blocked.why)}`);
+  }
+
   try {
-    await tasks.trigger<typeof categoriseRunTask>("categorise-run", {});
+    await tasks.trigger<typeof categoriseRunTask>("categorise-run", { jobRunId });
   } catch (err) {
+    await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     redirect(
       `/categories?error=${encodeURIComponent(
-        `Could not start the re-categorisation: ${err instanceof Error ? err.message : String(err)}. ` +
-          "Nothing was changed. This usually means the background worker is not running.",
+        explainEnqueueFailure(err),
       )}`,
     );
   }

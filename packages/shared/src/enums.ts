@@ -96,6 +96,18 @@ export const MANUAL_REVIEW_REASONS = [
    * packages/core/src/normalize/shared-domain.ts.
    */
   "shared_domain",
+  /**
+   * The business **name** matches a national chain, though nothing else proved it.
+   *
+   * Raised rather than acted on, and only ever as a flag. The chain guard elsewhere works on
+   * domains, which is safe — a domain belongs to exactly one company. Names do not: "Michael's
+   * Braids" and "Michaels" share a token, and silencing the first to catch the second is the wrong
+   * trade for a tool whose whole list is independent local businesses.
+   *
+   * Found when a promoted lead turned out to be "Office Depot Print & Copy Services" — a chain with
+   * no website on its listing, so there was no domain for the existing guard to catch.
+   */
+  "name_matches_chain",
 ] as const;
 export type ManualReviewReason = (typeof MANUAL_REVIEW_REASONS)[number];
 

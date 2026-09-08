@@ -12,7 +12,7 @@ const sectionHeadStyle: React.CSSProperties = {
   padding: "12px 20px",
   borderBottom: "1px solid var(--rule)",
   background: "var(--surface-2)",
-  fontSize: 13,
+  fontSize: 14.5,
   letterSpacing: "0.06em",
   textTransform: "uppercase",
   color: "var(--ink-2)",
@@ -23,7 +23,7 @@ const rowStyle: React.CSSProperties = {
   gap: 16,
   padding: "11px 20px",
   borderBottom: "1px solid var(--rule)",
-  fontSize: 14.5,
+  fontSize: 16,
 };
 const keyStyle: React.CSSProperties = { flex: "0 0 200px", color: "var(--ink-3)" };
 
@@ -58,10 +58,10 @@ export default async function RunStatusPage({ params }: { params: Promise<{ id: 
       </p>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 28, margin: "0 0 6px" }}>
+          <h1 style={{ fontSize: 31, margin: "0 0 6px" }}>
             {run.niche} near {run.location}
           </h1>
-          <p style={{ margin: 0, color: "var(--ink-3)", fontSize: 14.5 }}>
+          <p style={{ margin: 0, color: "var(--ink-3)", fontSize: 16 }}>
             {run.radius_miles} mile radius · status: <strong>{run.status}</strong>
           </p>
         </div>
@@ -79,7 +79,7 @@ export default async function RunStatusPage({ params }: { params: Promise<{ id: 
             border: "1px solid #d3ac71",
             borderRadius: 3,
             color: "var(--warn-ink)",
-            fontSize: 14.5,
+            fontSize: 16,
           }}
         >
           Still "planning" — this usually means Trigger.dev isn't configured yet
@@ -97,7 +97,7 @@ export default async function RunStatusPage({ params }: { params: Promise<{ id: 
             border: "1px solid #d3ac71",
             borderRadius: 3,
             color: "var(--warn-ink)",
-            fontSize: 14.5,
+            fontSize: 16,
           }}
         >
           {Object.entries(errors).map(([k, v]) => (
@@ -123,7 +123,7 @@ export default async function RunStatusPage({ params }: { params: Promise<{ id: 
           <span>
             {counters.cellsSaturated ?? 0}
             {(counters.cellsSaturated ?? 0) > 0 && (
-              <span style={{ color: "var(--ink-3)", fontSize: 13 }}> — hit the 60-result cap; subdivided where the depth limit allowed</span>
+              <span style={{ color: "var(--ink-3)", fontSize: 14.5 }}> — hit the 60-result cap; subdivided where the depth limit allowed</span>
             )}
           </span>
         </div>
@@ -158,7 +158,7 @@ export default async function RunStatusPage({ params }: { params: Promise<{ id: 
       </section>
 
       {counters.businessesFound ? (
-        <p style={{ fontSize: 14.5 }}>
+        <p style={{ fontSize: 16 }}>
           <Link href="/records">View the companies list &rarr;</Link>
         </p>
       ) : null}

@@ -68,8 +68,8 @@ export default async function ImportsPage({
 
         {imported.length === 0 && rows.length === 0 && (
           <div style={{ ...PANEL, padding: "56px 24px", textAlign: "center", color: "var(--ink-3)" }}>
-            <h3 style={{ color: "var(--ink)", fontSize: 19, margin: "0 0 8px" }}>No files yet</h3>
-            <p style={{ maxWidth: 460, margin: "0 auto 14px", fontSize: 14 }}>
+            <h3 style={{ color: "var(--ink)", fontSize: 20.5, margin: "0 0 8px" }}>No files yet</h3>
+            <p style={{ maxWidth: 460, margin: "0 auto 14px", fontSize: 15.5 }}>
               Upload a CSV of businesses and it will appear here with everything that happened to it.
             </p>
             <Link href="/records/import" className="btn" style={{ textDecoration: "none" }}>
@@ -102,7 +102,7 @@ export default async function ImportsPage({
                         {b.filename ?? "an uploaded file"}
                       </Link>
                     </td>
-                    <td style={{ ...TD, color: "var(--ink-3)", fontSize: 13.5 }}>
+                    <td style={{ ...TD, color: "var(--ink-3)", fontSize: 15 }}>
                       {new Date(b.created_at).toLocaleDateString("en-GB", {
                         day: "numeric",
                         month: "short",
@@ -118,7 +118,7 @@ export default async function ImportsPage({
                     </td>
                     <td style={TD}>
                       {(created.get(b.id) ?? 0) > 0 ? (
-                        <Link href={`/records?view=everything&from=imported&batch=${b.id}`} style={{ fontSize: 13.5 }}>
+                        <Link href={`/records?view=everything&from=imported&batch=${b.id}`} style={{ fontSize: 15 }}>
                           Show its {created.get(b.id)} leads
                         </Link>
                       ) : (
@@ -133,14 +133,14 @@ export default async function ImportsPage({
                               background: "none",
                               border: 0,
                               color: "var(--bad)",
-                              fontSize: 13.5,
+                              fontSize: 15,
                               cursor: "pointer",
                               padding: 0,
                             }}
                           >
                             Delete
                           </button>
-                          <div style={{ fontSize: 13, color: "var(--ink-3)" }}>created nothing</div>
+                          <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>created nothing</div>
                         </form>
                       )}
                     </td>
@@ -173,5 +173,5 @@ function StatusBadge({ status }: { status: string }) {
   const label =
     status === "imported" ? "Imported" : status === "discarded" ? "Discarded" : "Uploaded, not confirmed";
   const colour = status === "imported" ? "var(--accent)" : "var(--ink-3)";
-  return <span style={{ fontSize: 13, color: colour, fontWeight: status === "imported" ? 600 : 400 }}>{label}</span>;
+  return <span style={{ fontSize: 14.5, color: colour, fontWeight: status === "imported" ? 600 : 400 }}>{label}</span>;
 }

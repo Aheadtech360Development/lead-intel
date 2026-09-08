@@ -10,6 +10,7 @@ export default async function NewRecordPage({
 
   return (
     <AppShell
+      autoRefresh={false}
       back={{ href: "/records", label: "Back to leads" }}
       title="Add one by hand"
       what="For a business you already know about. Everything you type is marked first-party and verified — you confirmed it — and it is deduplicated against everything you already have, so adding one twice cannot create a second copy."
@@ -24,7 +25,7 @@ export default async function NewRecordPage({
             border: "1px solid #d3ac71",
             borderRadius: 3,
             color: "var(--warn-ink)",
-            fontSize: 14.5,
+            fontSize: 16,
           }}
         >
           {error}

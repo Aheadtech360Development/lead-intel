@@ -90,7 +90,9 @@ export async function createBusiness(formData: FormData): Promise<void> {
   }
 
   if (keys.length > 0) {
-    await supabase.from("identity_keys").insert(
+    // Checked, because identity keys are what stops the same business being created twice by a
+    // later import. Losing them silently produces a duplicate weeks later with no trace of why.
+    const { error: keyError } = await supabase.from("identity_keys").insert(
       keys.map((k) => ({
         business_id: business.id,
         key_type: k.keyType,
@@ -98,6 +100,14 @@ export async function createBusiness(formData: FormData): Promise<void> {
         rank: k.rank,
       })),
     );
+    if (keyError) {
+      redirect(
+        `/records/${business.id}?error=${encodeURIComponent(
+          `The business was created, but its matching keys were not saved (${keyError.message}). ` +
+            `A later import of the same business could create it a second time.`,
+        )}`,
+      );
+    }
   }
 
   // Manually entered fields are marked first-party and verified — a person confirmed them AND
@@ -111,7 +121,7 @@ export async function createBusiness(formData: FormData): Promise<void> {
   ].filter((r): r is { field_name: string; value: string } => r !== null);
 
   if (fieldRows.length > 0) {
-    await supabase.from("field_metadata").insert(
+    const { error: fieldError } = await supabase.from("field_metadata").insert(
       fieldRows.map((r) => ({
         business_id: business.id,
         field_name: r.field_name,
@@ -120,7 +130,17 @@ export async function createBusiness(formData: FormData): Promise<void> {
         verification_status: "verified" as const,
       })),
     );
+
+    // The record exists either way, so this is a warning rather than a failure — but an operator who
+    // typed a phone number and got a record without one deserves to know which of the two happened.
+    if (fieldError) {
+      redirect(
+        `/records/${business.id}?error=${encodeURIComponent(
+          `The business was created, but the website and phone you typed were not saved (${fieldError.message}).`,
+        )}`,
+      );
+    }
   }
 
-  redirect(`/records/${business.id}`);
+  redirect(`/records/${business.id}?saved=${encodeURIComponent("Business added.")}`);
 }

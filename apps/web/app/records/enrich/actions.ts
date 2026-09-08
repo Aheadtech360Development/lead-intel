@@ -9,6 +9,8 @@ import {
 import type { enrichRunTask } from "@lead-intel/jobs/enrich";
 import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
+import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
+import { failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -77,15 +79,34 @@ export async function buyEnrichment(formData: FormData): Promise<void> {
       ? Math.round(capDollars * 100)
       : DEFAULT_ENRICHMENT_SPEND_CAP_CENTS;
 
+  const jobRunId = await startJobRun(supabase, {
+    kind: "enrich-run",
+    label: `Buying ${sources.length === 1 ? sources[0] : `${sources.length} kinds of data`} for ${businessIds.length} ${
+      businessIds.length === 1 ? "business" : "businesses"
+    }`,
+    total: businessIds.length,
+  });
+
+  // Checked before the SDK is called. A missing key otherwise surfaces as an SDK error nobody can
+  // act on, and a *development* key on the live site is worse: it is accepted, the job is queued
+  // into an environment whose only worker is a laptop, and nothing ever runs or complains. See
+  // lib/enqueue.ts.
+  const blocked = enqueueBlockedBecause();
+  if (blocked.blocked) {
+    await failJobRun(supabase, jobRunId, blocked.why);
+    redirect(`/records/enrich?error=${encodeURIComponent(blocked.why)}`);
+  }
+
   try {
-    await tasks.trigger<typeof enrichRunTask>("enrich-run", { businessIds, sources, capCents });
+    await tasks.trigger<typeof enrichRunTask>("enrich-run", { businessIds, sources, capCents, jobRunId });
   } catch (err) {
+    await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     // Surfaced, not swallowed. An operator who pressed "buy" and saw a success page while nothing
     // ran would go looking for data that was never fetched — the same reasoning that made the
     // discovery flow record its own enqueue failures rather than hiding them.
     redirect(
       `/records/enrich?error=${encodeURIComponent(
-        `Could not start the purchase: ${err instanceof Error ? err.message : String(err)}. Nothing was spent.`,
+        explainEnqueueFailure(err),
       )}`,
     );
   }

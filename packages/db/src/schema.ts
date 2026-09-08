@@ -646,3 +646,135 @@ export const categoryRules = pgTable(
     orderIdx: index("category_rules_order_idx").on(table.enabled, table.priority, table.createdAt),
   }),
 );
+
+/**
+ * One audited page, per business.
+ *
+ * Kept apart from `findings` deliberately: a finding is a check's verdict about a business, while
+ * this is a description of one page that several checks will read from. Folding the two together
+ * would mean re-deriving the header every time a rule asked about it.
+ *
+ * `structure` and `layout` are jsonb because both shapes grow as the operator's checklists ask new
+ * questions — the alternative is a migration every time a rule wants something the extractor was
+ * already collecting. See PageStructure in packages/core and LayoutFacts in packages/providers.
+ */
+export const pageAudits = pgTable(
+  "page_audits",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    businessId: uuid("business_id")
+      .notNull()
+      .references(() => businesses.id, { onDelete: "cascade" }),
+
+    url: text("url").notNull(),
+    finalUrl: text("final_url"),
+    pageType: text("page_type").notNull(),
+    /** certain | likely | guess — a checklist may skip anything that was only guessed at. */
+    typeConfidence: text("type_confidence").notNull(),
+    chosenBecause: text("chosen_because"),
+    typeBecause: text("type_because"),
+
+    outcome: text("outcome").notNull(),
+    httpStatus: integer("http_status"),
+    /** Null unless the outcome is `ok`. A half-loaded page produces findings about nothing. */
+    structure: jsonb("structure"),
+    layout: jsonb("layout"),
+    screenshotPath: text("screenshot_path"),
+
+    /**
+     * The model's read on the page, and why there is none when there is none.
+     *
+     * Stored, where the checklist verdicts beside it are computed on read. The difference is cost:
+     * a rule over facts already in memory is free every time, and asking a model is not.
+     */
+    critique: jsonb("critique"),
+    critiqueDetail: text("critique_detail"),
+    critiqueModel: text("critique_model"),
+    critiqueAt: timestamp("critique_at", { withTimezone: true }),
+
+    consoleErrors: jsonb("console_errors"),
+    failedRequests: jsonb("failed_requests"),
+
+    elapsedMs: integer("elapsed_ms"),
+    detail: text("detail"),
+    renderedAt: timestamp("rendered_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    // Re-auditing updates rather than accumulating, so one page never shows two verdicts.
+    businessUrlUnique: uniqueIndex("page_audits_business_url_unique").on(table.businessId, table.url),
+    businessIdx: index("page_audits_business_idx").on(table.businessId, table.pageType),
+  }),
+);
+
+/**
+ * The operator's checklist rules.
+ *
+ * Live in the database rather than in code because the whole point is that a non-programmer edits
+ * them and the verdicts change immediately. `field` and `test` are constrained to the closed
+ * catalogue in packages/core/src/pages/checklist.ts — a rule naming a field nothing measures would
+ * be a rule that can never be evaluated, and the editor refuses to create one.
+ *
+ * The web app reads these through PostgREST; the worker needs them too, for the critique, which
+ * must be shown the same verdicts an operator sees. Hence a Drizzle table for a schema that was
+ * created by migration.
+ */
+/**
+ * What is running right now, and how far along it is.
+ *
+ * The row is written by the **web app at the moment it enqueues**, and only then advanced by the
+ * worker. That ordering is deliberate: a queue can be a minute deep, and a job that is still
+ * waiting is one the operator started and is entitled to see. Creating it worker-side would leave
+ * exactly the gap the operator reported — press the button, nothing appears, no way to tell whether
+ * anything happened.
+ *
+ * `total` is nullable because a job often does not know its own size until it has looked. A
+ * progress bar that invents a denominator is worse than one that admits it cannot draw itself yet.
+ */
+export const jobRuns = pgTable("job_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+
+  /** Matches the Trigger.dev task id, so a row can always be traced back to a run. */
+  kind: text("kind").notNull(),
+  /** What the operator sees, in their words: "Reading 42 websites". */
+  label: text("label").notNull(),
+  /** queued | running | done | failed */
+  status: text("status").notNull().default("queued"),
+
+  total: integer("total"),
+  done: integer("done").notNull().default(0),
+  /** What it is doing at this moment: "crystaldtf.com, page 3 of 7". */
+  step: text("step"),
+  /** Why it failed, or what it produced. Never blank on a finished row. */
+  detail: text("detail"),
+
+  businessId: uuid("business_id").references(() => businesses.id, { onDelete: "cascade" }),
+  /** Accumulated as it runs, so spend is visible while it happens rather than afterwards. */
+  costCents: numeric("cost_cents", { precision: 12, scale: 4 }).notNull().default("0"),
+
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  createdBy: uuid("created_by"),
+});
+
+export const pageChecklists = pgTable("page_checklists", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdBy: uuid("created_by").notNull(),
+
+  name: text("name").notNull(),
+  /** Null means every page type. */
+  pageType: text("page_type"),
+  /** Null means every category. A rule for florists should not judge a print shop. */
+  category: text("category"),
+
+  field: text("field").notNull(),
+  test: text("test").notNull(),
+  value: integer("value"),
+  weight: integer("weight").notNull().default(10),
+  enabled: boolean("enabled").notNull().default(true),
+
+  /** What the operator would say on the call when this fails. Written by them, shown verbatim. */
+  says: text("says").notNull(),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

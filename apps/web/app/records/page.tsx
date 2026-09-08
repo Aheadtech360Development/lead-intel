@@ -13,11 +13,55 @@ import {
   TD,
   Th,
   TIER_MEANING,
+  Panel,
+  Price,
   TierBadge,
   WEBSITE_LABELS,
 } from "../ui";
 import { claimBusiness, releaseClaim } from "./actions";
 import { analyseUnscored } from "./analyse-actions";
+import { auditEveryWebsite, rescoreEverything } from "./audit-actions";
+
+/**
+ * The whole-list jobs, as data.
+ *
+ * Every entry carries its price and the service that bills it, because the operator's standing
+ * instruction is that no cost may appear without naming the platform behind it and what that
+ * platform does. Making the price part of the definition means an unnamed one cannot be written by
+ * accident.
+ */
+const WHOLE_LIST_JOBS: {
+  title: string;
+  what: string;
+  button: string;
+  action: (formData: FormData) => void | Promise<void>;
+  cents: number;
+  buys: string;
+  platform: string;
+  primary?: boolean;
+}[] = [
+  {
+    title: "Read every website page by page",
+    what:
+      "Opens each business's site in a real browser, walks its pages, measures the layout, keeps a screenshot of the home and product pages, and asks the model what the measurements miss. Skips anything already read.",
+    button: "Read them page by page",
+    action: auditEveryWebsite,
+    cents: 0.36,
+    buys: "the model's read on each page it finds",
+    platform: "Google AI Studio (Gemini), plus browser time on Trigger.dev",
+    primary: true,
+  },
+  {
+    title: "Re-score and re-sort everything",
+    what:
+      "Works the two scores and the priorities out again from the checks already stored. No website is read again and no provider is called - it is arithmetic over what is already here.",
+    button: "Re-score everything",
+    action: rescoreEverything,
+    cents: 0,
+    buys: "nothing - it only re-reads what is already stored",
+    platform: "our own code, on Trigger.dev",
+  },
+];
 
 /**
  * The call list (spec §8.1) — and now only the call list.
@@ -51,11 +95,17 @@ interface Filters {
   ads?: string;
   /** A follower floor, so "only the ones with a real following" is one click. */
   minFollowers?: string;
+  /** Free text: a name, a town, a domain. */
+  q?: string;
+  /** "me" | "anyone" | "nobody" — who has claimed it. */
+  claimed?: string;
 }
 
 interface PageParams extends Filters {
   /** Set after a purchase or an analysis is enqueued, so the operator sees what they started. */
   bought?: string;
+  /** Set after anything else that succeeded. Two names for one idea, kept because both are in use. */
+  saved?: string;
   /** Set when starting something failed — shown rather than swallowed. */
   error?: string;
 }
@@ -89,6 +139,8 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     ...(params.rule ? { rule: params.rule } : {}),
     ...(params.ads && params.ads !== "all" ? { ads: params.ads } : {}),
     ...(params.minFollowers && params.minFollowers !== "all" ? { minFollowers: params.minFollowers } : {}),
+    ...(params.q && params.q.trim() ? { q: params.q.trim() } : {}),
+    ...(params.claimed && params.claimed !== "all" ? { claimed: params.claimed } : {}),
   };
 
   const supabase = await createClient();
@@ -101,13 +153,13 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
   const { data: all, error } = await supabase
     .from("businesses")
     .select(
-      "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, category, subcategory, category_rule_id",
+      "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, category, subcategory, category_rule_id, scored_at",
     )
     .eq("status", "active")
     .order("tier", { ascending: true, nullsFirst: false })
     .order("problem_score", { ascending: false, nullsFirst: false });
 
-  const [{ data: contactRows }, { data: spendRows }, { data: batchRows }, { data: analysedRows }, { data: socialRows }] =
+  const [{ data: contactRows }, { data: spendRows }, { data: batchRows }, { data: socialRows }] =
     await Promise.all([
     supabase
       .from("field_metadata")
@@ -119,10 +171,6 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
       .limit(20000),
     supabase.from("provider_calls").select("cost_cents").limit(20000),
     supabase.from("import_batches").select("id, filename").eq("status", "imported"),
-    // One row per business the crawler has visited. Deliberately not a query against `findings`:
-    // that table holds one row per check per business — over eleven thousand rows for a few
-    // hundred businesses — and PostgREST would cap the response long before it answered this.
-    supabase.from("field_metadata").select("business_id").eq("field_name", "website_status_reason").limit(20000),
     // Instagram and ads, for the columns and the two filters below. One row per business per
     // field, so this is bounded by the list size rather than by anything unbounded.
     supabase
@@ -133,8 +181,6 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
   ]);
 
   const batchNames = new Map((batchRows ?? []).map((b) => [b.id, b.filename ?? "an uploaded file"]));
-  const analysed = new Set((analysedRows ?? []).map((f) => f.business_id));
-
   const social = new Map<string, { followers: number | null; handle: string | null; adsRunning: boolean | null }>();
   for (const row of socialRows ?? []) {
     const at = social.get(row.business_id) ?? { followers: null, handle: null, adsRunning: null };
@@ -160,10 +206,43 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
   const spentCents = (spendRows ?? []).reduce((sum, r) => sum + Number(r.cost_cents ?? 0), 0);
 
   const rows = all ?? [];
-  const neverAnalysed = rows.filter((b) => !analysed.has(b.id));
+
+  /**
+   * "Never analysed" means the same thing here as it does to the task that fixes it.
+   *
+   * It did not, and the consequence was a banner that could never be cleared. This page counted
+   * businesses with no `website_status_reason` field, which the **crawler** writes; the task
+   * selects businesses with no `findings` row. Ten businesses had findings but no website to crawl,
+   * so they satisfied the page's definition and not the task's: the banner said "10 businesses have
+   * never been analysed" and the button ran, reported "Read 0 websites", and left the banner exactly
+   * where it was. Pressing it again would do the same thing forever.
+   *
+   * `scored_at` is written whenever findings are scored, and was verified against the task's own
+   * definition across all 422 active businesses with zero disagreement in either direction. Using a
+   * column already on the row also removes a twenty-thousand-row query.
+   */
+  const neverAnalysed = rows.filter((b) => b.scored_at === null);
+
+  /** Free-text search over the things an operator would actually type. */
+  const needle = (current.q ?? "").toLowerCase();
+  const matchesSearch = (b: (typeof rows)[number]) =>
+    needle.length === 0 ||
+    [b.display_name, b.city, b.state, b.category, b.subcategory]
+      .some((field) => typeof field === "string" && field.toLowerCase().includes(needle));
+
+  const matchesClaim = (b: (typeof rows)[number]) =>
+    current.claimed === "me"
+      ? b.claimed_by === claims?.sub
+      : current.claimed === "anyone"
+        ? b.claim_status === "claimed"
+        : current.claimed === "nobody"
+          ? b.claim_status !== "claimed"
+          : true;
 
   const inView = (b: (typeof rows)[number]) =>
-    view === "ready" ? Boolean(b.passed_gate) : view === "unanalysed" ? !analysed.has(b.id) : true;
+    matchesSearch(b) &&
+    matchesClaim(b) &&
+    (view === "ready" ? Boolean(b.passed_gate) : view === "unanalysed" ? b.scored_at === null : true);
 
   const shown = rows.filter((b) => {
     if (!inView(b)) return false;
@@ -273,6 +352,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
         {params.bought && (
           <Banner tone="brand">{decodeURIComponent(params.bought)}</Banner>
         )}
+        {/* The whole-list buttons redirect with `saved`, which this page did not render — so
+            pressing "Read them page by page" produced a redirect and complete silence. */}
+        {params.saved && <Banner tone="good">{decodeURIComponent(params.saved)}</Banner>}
         {params.error && (
           <Banner tone="bad">{decodeURIComponent(params.error)}</Banner>
         )}
@@ -291,22 +373,78 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
             }}
           >
             <div style={{ flex: "1 1 440px", minWidth: 280 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 3 }}>
+              <div style={{ fontSize: 16.5, fontWeight: 700, marginBottom: 3 }}>
                 {neverAnalysed.length} businesses have never been analysed
               </div>
-              <div style={{ fontSize: 13.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
+              <div style={{ fontSize: 15, color: "var(--ink-3)", lineHeight: 1.5 }}>
                 Their websites have not been read yet, so they have no score. That is not a verdict
                 about them — nobody has looked. <strong>It costs nothing.</strong>
               </div>
             </div>
             <form action={analyseUnscored}>
               <input type="hidden" name="back" value={href(current, {})} />
-              <button className="btn" type="submit" style={{ padding: "9px 16px", fontSize: 14.5 }}>
+              <button className="btn" type="submit" style={{ padding: "9px 16px", fontSize: 16 }}>
                 Analyse them now
               </button>
             </form>
           </div>
         )}
+
+        {/*
+          * Every whole-list job, with a button, and each one saying what it costs.
+          *
+          * Two of these had no way to be started from anywhere in the product: reading websites
+          * page by page could only be done one business at a time from its own record, and
+          * re-scoring could not be done at all. Both tasks existed and worked. The operator's
+          * report was the general form of it - the things that were built should have buttons,
+          * and the buttons should work.
+          *
+          * Each says what it costs and who bills it, because a button that might spend money and
+          * does not say so is a button nobody can press with confidence.
+          */}
+        <Panel
+          title="Run something over the whole list"
+          hint="Each of these works through every business. Progress appears at the top of the screen and keeps updating while you work."
+          tone="brand"
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 1, background: "var(--rule)" }}>
+            {WHOLE_LIST_JOBS.map((job) => (
+              <div key={job.title} style={{ background: "var(--surface)", padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <div style={{ fontSize: 16.5, fontWeight: 750, color: "var(--ink)" }}>{job.title}</div>
+                  <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55, marginTop: 4 }}>{job.what}</div>
+                </div>
+                <div style={{ marginTop: "auto", display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
+                  <form action={job.action}>
+                    <button className={job.primary ? "btn" : "btn-2 btn"} type="submit">
+                      {job.button}
+                    </button>
+                  </form>
+                  <span style={{ marginLeft: "auto" }}>
+                    <Price cents={job.cents} what={job.buys} platform={job.platform} free={job.cents === 0} />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        {/*
+          * The search form itself, declared outside the table so the two do not nest.
+          *
+          * The table lives inside a GET form that posts ticked ids to the buy screen, and HTML
+          * forbids a form inside a form. The `form=` attribute is the way out: the input sits
+          * visually in the table header and belongs to this form, which lives out here.
+          *
+          * Every other active filter rides along as a hidden input, so searching inside "Priority 1,
+          * running ads" narrows that set instead of quietly discarding it.
+          */}
+        <form id="lead-search" method="get" action="/records" />
+        {Object.entries(current)
+          .filter(([key]) => key !== "q")
+          .map(([key, value]) => (
+            <input key={key} type="hidden" form="lead-search" name={key} value={String(value)} />
+          ))}
 
         {/* ---- Sidebar of filters, main column of rows -------------------------------- */}
         <div className="work-layout">
@@ -320,13 +458,13 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                 gap: 8,
               }}
             >
-              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              <span style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
                 Filters
               </span>
               {anyFilter && (
                 <Link
                   href={href({ ...(view !== "ready" ? { view } : {}) }, {})}
-                  style={{ marginLeft: "auto", fontSize: 12.5 }}
+                  style={{ marginLeft: "auto", fontSize: 14 }}
                 >
                   Clear all
                 </Link>
@@ -358,6 +496,38 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   accent
                 />
               )}
+            </FilterSection>
+
+            {/*
+              * Who has claimed what.
+              *
+              * A lead could be claimed and then not found again: the badge appeared on the row, and
+              * there was no way to ask "which ones are mine?" without reading the whole list. That
+              * makes claiming a note to nobody.
+              */}
+            <FilterSection title="Claimed" hint="Who has put their name on a lead.">
+              <FilterOption
+                label="Mine"
+                explain="Leads you claimed yourself"
+                count={rows.filter((b) => b.claimed_by === claims?.sub).length}
+                href={toggle(current, "claimed", "me")}
+                active={current.claimed === "me"}
+                accent
+              />
+              <FilterOption
+                label="Claimed by anyone"
+                explain="Someone is already on it"
+                count={rows.filter((b) => b.claim_status === "claimed").length}
+                href={toggle(current, "claimed", "anyone")}
+                active={current.claimed === "anyone"}
+              />
+              <FilterOption
+                label="Nobody has claimed"
+                explain="Free to pick up"
+                count={rows.filter((b) => b.claim_status !== "claimed").length}
+                href={toggle(current, "claimed", "nobody")}
+                active={current.claimed === "nobody"}
+              />
             </FilterSection>
 
             <FilterSection title="Priority" hint="How good a lead is, 1 being the best.">
@@ -412,7 +582,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   />
                 ))}
                 {uncategorised > 0 && (
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 6, lineHeight: 1.4 }}>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 6, lineHeight: 1.4 }}>
                     {uncategorised} match no rule yet. <Link href="/categories">Write one</Link>.
                   </div>
                 )}
@@ -461,16 +631,16 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
 
             {current.batch && (
               <FilterSection title="One file" hint="You followed a link from the imported files page.">
-                <div style={{ fontSize: 13.5, color: "var(--ink-2)", marginBottom: 6 }}>
+                <div style={{ fontSize: 15, color: "var(--ink-2)", marginBottom: 6 }}>
                   {batchNames.get(current.batch) ?? "an uploaded file"}
                 </div>
-                <Link href={href(current, { batch: "" })} style={{ fontSize: 12.5 }}>
+                <Link href={href(current, { batch: "" })} style={{ fontSize: 14 }}>
                   Show every file
                 </Link>
               </FilterSection>
             )}
 
-            <div style={{ padding: "12px 16px", fontSize: 13, color: "var(--ink-3)", lineHeight: 1.5 }}>
+            <div style={{ padding: "12px 16px", fontSize: 14.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
               Spent so far <strong style={{ color: "var(--ink)" }}>${(spentCents / 100).toFixed(2)}</strong> on paid
               lookups. Reading websites and scoring are free.
               {" "}
@@ -480,7 +650,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
 
           <div style={{ minWidth: 0 }}>
             {current.from === "imported" && (
-              <div style={{ ...PANEL, padding: "12px 16px", borderColor: "var(--accent)", fontSize: 13.5, lineHeight: 1.55 }}>
+              <div style={{ ...PANEL, padding: "12px 16px", borderColor: "var(--accent)", fontSize: 15, lineHeight: 1.55 }}>
                 <strong>These came from a file, so two checks cannot run on them.</strong> A
                 spreadsheet carries no Google listing, so there is no way to read their reviews,
                 their rating, or how they rank in local search. Their Problem score is built from{" "}
@@ -492,8 +662,8 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
 
             {!error && shown.length === 0 && (
               <div style={{ ...PANEL, padding: "56px 24px", textAlign: "center", color: "var(--ink-3)" }}>
-                <h3 style={{ color: "var(--ink)", fontSize: 19, margin: "0 0 8px" }}>Nothing matches</h3>
-                <p style={{ maxWidth: 460, margin: "0 auto 14px", fontSize: 14 }}>
+                <h3 style={{ color: "var(--ink)", fontSize: 20.5, margin: "0 0 8px" }}>Nothing matches</h3>
+                <p style={{ maxWidth: 460, margin: "0 auto 14px", fontSize: 15.5 }}>
                   No business fits every filter on the left at once.
                 </p>
                 {anyFilter && (
@@ -515,6 +685,39 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   <input key={key} type="hidden" name={`f_${key}`} value={value} />
                 ))}
 
+                {/*
+                  * Search, as a GET form.
+                  *
+                  * There was no way to find a named business anywhere in the product - the only
+                  * route to one was to filter the list down and read it. A GET form needs no
+                  * JavaScript: the browser puts the box's contents in the query string and the
+                  * server filters on it, which is the same mechanism every filter link beside it
+                  * already uses.
+                  *
+                  * The other filters travel with it as hidden inputs, so searching inside "Priority
+                  * 1, running ads" narrows that set rather than silently throwing it away.
+                  */}
+                <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--rule)", flexWrap: "wrap" }}>
+                  <input
+                    type="search"
+                    name="q"
+                    form="lead-search"
+                    defaultValue={current.q ?? ""}
+                    placeholder="Search a business by name, town or category"
+                    className="inp"
+                    style={{ flex: "1 1 320px", maxWidth: 520 }}
+                    aria-label="Search businesses"
+                  />
+                  <button className="btn" type="submit" form="lead-search">
+                    Search
+                  </button>
+                  {current.q ? (
+                    <Link href={href(current, { q: "" })} className="btn-2 btn">
+                      Clear &ldquo;{current.q}&rdquo;
+                    </Link>
+                  ) : null}
+                </div>
+
                 <div
                   style={{
                     display: "flex",
@@ -525,14 +728,19 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                     borderBottom: "1px solid var(--rule)",
                   }}
                 >
-                  <span style={{ fontSize: 14.5, fontWeight: 700 }}>
+                  <span style={{ fontSize: 16, fontWeight: 700 }}>
                     {shown.length} {shown.length === 1 ? "business" : "businesses"}
                   </span>
-                  <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                  {current.q ? (
+                    <span style={{ fontSize: 15, color: "var(--ink)", fontWeight: 650 }}>
+                      matching &ldquo;{current.q}&rdquo;
+                    </span>
+                  ) : null}
+                  <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                     {view === "ready" ? "worth calling" : view === "unanalysed" ? "not analysed yet" : "in total"}
                   </span>
                   <span style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                    <a href={`/records/export${href(current, {}).replace("/records", "")}`} style={{ fontSize: 13.5 }}>
+                    <a href={`/records/export${href(current, {}).replace("/records", "")}`} style={{ fontSize: 15 }}>
                       Download CSV
                     </a>
                     {/* Hidden in the "not analysed" view on purpose. The confirm screen rebuilds
@@ -540,11 +748,11 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                         is not a column it can filter on — it would silently price a different set
                         of businesses than the one on screen. Ticking rows still works there. */}
                     {view !== "unanalysed" && (
-                      <button className="btn-2 btn" type="submit" name="scope" value="filtered" style={{ padding: "6px 12px", fontSize: 13.5 }}>
+                      <button className="btn-2 btn" type="submit" name="scope" value="filtered" style={{ padding: "6px 12px", fontSize: 15 }}>
                         Get paid data for all {shown.length}
                       </button>
                     )}
-                    <button className="btn" type="submit" style={{ padding: "6px 12px", fontSize: 13.5 }}>
+                    <button className="btn" type="submit" style={{ padding: "6px 12px", fontSize: 15 }}>
                       Get paid data for ticked
                     </button>
                   </span>
@@ -567,7 +775,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   <tbody>
                     {shown.map((b) => {
                       const isMine = claims?.sub && b.claimed_by === claims.sub;
-                      const seen = analysed.has(b.id);
+                      // Same definition as the banner and the task. See the note beside
+                      // `neverAnalysed` for why there is only one of these now.
+                      const seen = b.scored_at !== null;
                       const contact = contactable.get(b.id);
                       const has = [contact?.email ? "email" : null, contact?.phone ? "phone" : null].filter(Boolean);
                       return (
@@ -588,7 +798,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                             <Link href={`/records/${b.id}`} style={{ fontWeight: 600 }}>
                               {b.display_name}
                             </Link>
-                            <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 2 }}>
+                            <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2 }}>
                               {[b.city, b.state].filter(Boolean).join(", ") || "Location unknown"}
                               {" · "}
                               {/* "Couldn't check" is a claim about their site. Before anyone has
@@ -610,22 +820,22 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                           <td style={TD}>
                             {b.route ? (
                               <>
-                                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{ROUTE_LABELS[b.route] ?? b.route}</div>
+                                <div style={{ fontWeight: 600, fontSize: 15 }}>{ROUTE_LABELS[b.route] ?? b.route}</div>
                                 {b.route_reason && (
-                                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 2, lineHeight: 1.4 }}>
+                                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2, lineHeight: 1.4 }}>
                                     {b.route_reason}
                                   </div>
                                 )}
                               </>
                             ) : (
-                              <span style={{ color: "var(--ink-3)", fontSize: 13 }}>
+                              <span style={{ color: "var(--ink-3)", fontSize: 14.5 }}>
                                 {seen ? "Nothing solid enough" : "Not analysed yet"}
                               </span>
                             )}
                           </td>
                           <td style={TD}>
                             {b.problem_score === null && b.intent_score === null ? (
-                              <span style={{ color: "var(--ink-3)", fontSize: 13 }}>
+                              <span style={{ color: "var(--ink-3)", fontSize: 14.5 }}>
                                 {seen ? "Not scored" : "Not analysed"}
                               </span>
                             ) : (
@@ -635,30 +845,30 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                           <td style={TD}>
                             {b.category ? (
                               <>
-                                <div style={{ fontSize: 13.5 }}>{b.category}</div>
+                                <div style={{ fontSize: 15 }}>{b.category}</div>
                                 {b.subcategory ? (
-                                  <div style={{ fontSize: 13, color: "var(--ink-3)" }}>{b.subcategory}</div>
+                                  <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>{b.subcategory}</div>
                                 ) : null}
                               </>
                             ) : (
-                              <span style={{ fontSize: 13, color: "var(--ink-3)" }}>no rule matched</span>
+                              <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>no rule matched</span>
                             )}
                           </td>
                           <td style={TD}>
                             {(() => {
                               const s = social.get(b.id);
                               if (!s || (s.followers === null && s.adsRunning === null && !s.handle)) {
-                                return <span style={{ fontSize: 13, color: "var(--ink-3)" }}>not looked up</span>;
+                                return <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>not looked up</span>;
                               }
                               return (
                                 <>
-                                  <div style={{ fontSize: 13.5, fontVariantNumeric: "tabular-nums" }}>
+                                  <div style={{ fontSize: 15, fontVariantNumeric: "tabular-nums" }}>
                                     {s.followers === null ? "—" : `${s.followers.toLocaleString()} followers`}
                                   </div>
                                   {s.adsRunning !== null ? (
                                     <div
                                       style={{
-                                        fontSize: 13,
+                                        fontSize: 14.5,
                                         color: s.adsRunning ? "var(--accent)" : "var(--ink-3)",
                                         fontWeight: s.adsRunning ? 600 : 400,
                                       }}
@@ -672,9 +882,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                           </td>
                           <td style={TD}>
                             {has.length > 0 ? (
-                              <span style={{ fontSize: 13 }}>{has.join(" + ")}</span>
+                              <span style={{ fontSize: 14.5 }}>{has.join(" + ")}</span>
                             ) : (
-                              <span style={{ fontSize: 13, color: "var(--ink-3)" }}>listing only</span>
+                              <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>listing only</span>
                             )}
                           </td>
                           <td style={TD}>
@@ -683,7 +893,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                                 className="btn-2 btn"
                                 type="submit"
                                 formAction={claimBusiness.bind(null, b.id)}
-                                style={{ padding: "5px 11px", fontSize: 13 }}
+                                style={{ padding: "5px 11px", fontSize: 14.5 }}
                               >
                                 Claim
                               </button>
@@ -692,12 +902,12 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                                 className="btn-2 btn"
                                 type="submit"
                                 formAction={releaseClaim.bind(null, b.id)}
-                                style={{ padding: "5px 11px", fontSize: 13 }}
+                                style={{ padding: "5px 11px", fontSize: 14.5 }}
                               >
                                 Release
                               </button>
                             ) : (
-                              <span style={{ fontSize: 13, color: "var(--ink-3)" }}>Taken</span>
+                              <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>Taken</span>
                             )}
                           </td>
                         </tr>

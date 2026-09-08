@@ -3,6 +3,8 @@
 import { redirect } from "next/navigation";
 import type { discoveryTask } from "@lead-intel/jobs/discovery";
 import { tasks } from "@trigger.dev/sdk";
+import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
+import { failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -46,8 +48,34 @@ export async function createRun(formData: FormData): Promise<void> {
     redirect(`/search?error=${encodeURIComponent(error?.message ?? "Could not create the run.")}`);
   }
 
+  /**
+   * Discovery reports itself like every other job now.
+   *
+   * It was the one button in the product that did not. Pressing it created a run, enqueued a task
+   * and redirected, and the progress banner — which follows the operator around every other screen
+   * — stayed empty, because nothing had written a row for it to show. That is exactly the gap the
+   * operator hit: the search may well have started, and there was no way to tell.
+   */
+  const jobRunId = await startJobRun(supabase, {
+    kind: "discovery",
+    label: `Searching Google Maps for "${niche}" near ${location}`,
+  });
+
+  // Checked before the SDK is called, so a missing or development key is named in words that say
+  // what to do about it rather than surfacing as an SDK error — or, worse, succeeding silently into
+  // an environment with no worker. See lib/enqueue.ts.
+  const blocked = enqueueBlockedBecause();
+  if (blocked.blocked) {
+    await failJobRun(supabase, jobRunId, blocked.why);
+    await supabase
+      .from("runs")
+      .update({ status: "failed", finished_at: new Date().toISOString(), errors: { enqueue: blocked.why } })
+      .eq("id", run.id);
+    redirect(`/search?error=${encodeURIComponent(blocked.why)}`);
+  }
+
   try {
-    await tasks.trigger<typeof discoveryTask>("discovery", { runId: run.id });
+    await tasks.trigger<typeof discoveryTask>("discovery", { runId: run.id, jobRunId });
   } catch (err) {
     // Record why enqueueing failed instead of swallowing it. An earlier version caught this
     // silently on the reasoning that "Trigger.dev may not be configured yet" — which left a run
@@ -55,14 +83,17 @@ export async function createRun(formData: FormData): Promise<void> {
     // reason onto the run makes the failure visible on its own status page, which is the same
     // rule the rest of the pipeline follows: a step that could not run never looks like one that
     // ran fine.
+    const why = explainEnqueueFailure(err);
+    await failJobRun(supabase, jobRunId, why);
     await supabase
       .from("runs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        errors: { enqueue: err instanceof Error ? err.message : String(err) },
-      })
+      .update({ status: "failed", finished_at: new Date().toISOString(), errors: { enqueue: why } })
       .eq("id", run.id);
+
+    // Shown on the screen they came from, not only on the run's own page. An operator who pressed a
+    // button and was sent to a page that quietly says "failed" somewhere down it has been told, in
+    // the strictly technical sense, and not in any useful one.
+    redirect(`/search?error=${encodeURIComponent(why)}`);
   }
 
   redirect(`/search/runs/${run.id}`);

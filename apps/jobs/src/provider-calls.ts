@@ -29,9 +29,25 @@ export async function recordProviderCall(
      * where an operator will actually look for it.
      */
     detail?: string | null;
+    /**
+     * Makes this call its own entry rather than one that can be recognised again later.
+     *
+     * Idempotency is right for a *purchase*: buying a business's Google listing twice should not
+     * happen, and the key is what prevents it. It is wrong for a cost that is genuinely incurred
+     * again each time, and the page critique is one — re-auditing a site really does pay the model
+     * again, and there are several pages per business.
+     *
+     * Two things went wrong without this. Both product pages of one site shared the key
+     * `critique-page:products:<business>`, so the second page's cost overwrote the first instead of
+     * adding to it; and every re-audit overwrote the lot. The ledger, whose whole purpose is that
+     * the spend figure is counted rather than estimated, was quietly under-reporting.
+     */
+    unique?: string;
   },
 ): Promise<"reserved" | "already_bought" | "updated"> {
-  const idempotencyKey = `${params.endpoint}:${params.businessId}`;
+  const idempotencyKey = params.unique
+    ? `${params.endpoint}:${params.businessId}:${params.unique}`
+    : `${params.endpoint}:${params.businessId}`;
 
   const [existing] = await db
     .select({ status: providerCalls.status })

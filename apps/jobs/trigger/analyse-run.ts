@@ -1,5 +1,6 @@
 import { businesses, createDbClient, fieldMetadata, findings } from "@lead-intel/db";
 import { logger, task } from "@trigger.dev/sdk";
+import { jobProgress } from "../src/job-progress.js";
 import { and, eq, notExists, sql } from "drizzle-orm";
 import { auditWebsiteTask } from "./audit-website.js";
 import { categoriseRunTask } from "./categorise.js";
@@ -57,6 +58,12 @@ export const analyseRunTask = task({
      * that would have labelled it had nothing to go on.
      */
     categoriseAll?: boolean;
+    /**
+     * The row the web app created when the operator pressed the button, so this run can report
+     * itself. Optional: a run started from a script or a retry still works, it just reports to
+     * nobody rather than refusing to start.
+     */
+    jobRunId?: string | null;
     /** Set when the operator asked for categories but not for a crawl. */
     skipAnalysis?: boolean;
     /**
@@ -109,58 +116,107 @@ export const analyseRunTask = task({
 
     logger.info("analysis starting", { toAudit: toAudit.length, explicit: explicit.length > 0 });
 
-    let audited = 0;
-    for (let i = 0; i < toAudit.length; i += BATCH_SIZE) {
-      const chunk = toAudit.slice(i, i + BATCH_SIZE);
-      // AndWait, unlike the other run tasks: PageSpeed below reads the website status this decides.
-      await auditWebsiteTask.batchTriggerAndWait(chunk.map((id) => ({ payload: { businessId: id } })));
-      audited += chunk.length;
-      logger.info("crawled", { done: audited, of: toAudit.length });
+    /**
+     * Now the size is known, so the bar can be drawn honestly.
+     *
+     * Not at the top of the task: until `toAudit` has been worked out, the total is genuinely
+     * unknown, and the banner draws a moving stripe rather than a made-up percentage. That is the
+     * same third state this codebase keeps arriving at — "we do not know" is a real answer and
+     * deserves its own display.
+     */
+    const progress = jobProgress(db, payload.jobRunId);
+
+    try {
+      await progress.start(toAudit.length, `Reading ${toAudit.length} websites`);
+
+      let audited = 0;
+      for (let i = 0; i < toAudit.length; i += BATCH_SIZE) {
+        const chunk = toAudit.slice(i, i + BATCH_SIZE);
+        // AndWait, unlike the other run tasks: PageSpeed below reads the website status this decides.
+        await auditWebsiteTask.batchTriggerAndWait(chunk.map((id) => ({ payload: { businessId: id } })));
+        audited += chunk.length;
+        await progress.setDone(audited, `Read ${audited} of ${toAudit.length} websites`);
+        logger.info("crawled", { done: audited, of: toAudit.length });
+      }
+
+      // Re-asked rather than reused. A crawl can end in `no_website` or a temporary DNS failure, and
+      // measuring PageSpeed for a site the crawler never reached would spend a request to learn
+      // nothing. The `pagespeed_outcome` field is the record of "we already tried this one".
+      const toMeasure = await idsWithoutPageSpeed(db, explicit, payload.limit ?? 5000);
+      await progress.say(`Measuring page speed on ${toMeasure.length} sites`);
+
+      let measured = 0;
+      for (let i = 0; i < toMeasure.length; i += BATCH_SIZE) {
+        const chunk = toMeasure.slice(i, i + BATCH_SIZE);
+        await pageSpeedTask.batchTriggerAndWait(chunk.map((id) => ({ payload: { businessId: id } })));
+        measured += chunk.length;
+        await progress.say(`Measured ${measured} of ${toMeasure.length} for speed`);
+        logger.info("measured", { done: measured, of: toMeasure.length });
+      }
+
+      // YouTube (O8) last, because it is the only step that can run out rather than finish. It stops
+      // itself when the daily quota is gone and leaves the rest for tomorrow, so putting it here
+      // means a quota that ran out never costs the crawl, the speed test or the scores.
+      let youtube: { checked: number; remaining: number; stoppedOnQuota: boolean } = {
+        checked: 0,
+        remaining: 0,
+        stoppedOnQuota: false,
+      };
+      await progress.say("Checking YouTube channels");
+      const youtubeRun = await youTubeRunTask.triggerAndWait({});
+      if (youtubeRun.ok) youtube = youtubeRun.output;
+      else logger.warn("YouTube pass did not complete; scores below are otherwise unaffected");
+
+      // Scores everything analysed, not only this batch. Rescoring is pure arithmetic over findings
+      // already stored — no crawl, no cost — and running it whole means one set of weights applies
+      // to the entire list rather than the newest rows carrying a different vintage.
+      await progress.say("Scoring and sorting everything");
+      await scoreRunTask.triggerAndWait({});
+
+      // Last, because it is the only step that reads what the crawl wrote. A rule looking for
+      // "embroidery" on a website needs the website to have been read first.
+      let categorised = 0;
+      if (payload.categoriseAll) {
+        const run = await categoriseRunTask.triggerAndWait({});
+        if (run.ok) categorised = run.output.categorised;
+      } else if (toCategorise.length > 0) {
+        const run = await categoriseRunTask.triggerAndWait({ businessIds: toCategorise });
+        if (run.ok) categorised = run.output.categorised;
+      }
+
+      logger.info("analysis finished", { audited, measured, categorised, youtube });
+
+      // Always a sentence, never a blank. A finished row with no detail reads, on the operator's
+      // screen, exactly like one that is still going.
+      await progress.finish({
+        ok: true,
+        detail:
+          `Read ${audited} ${audited === 1 ? "website" : "websites"}, measured ${measured} for speed, ` +
+          `checked ${youtube.checked} YouTube ${youtube.checked === 1 ? "channel" : "channels"}` +
+          `${youtube.stoppedOnQuota ? " (YouTube's daily quota ran out, the rest wait for tomorrow)" : ""}, ` +
+          `and sorted ${categorised} into categories. Nothing here cost anything.`,
+      });
+
+      return { audited, measured, categorised, youtube };
+    } catch (err) {
+      /**
+       * The row must stop saying "running" whatever happens.
+       *
+       * Without this a task that throws leaves its row `running` for ever, and that is not
+       * cosmetic: the banner shows on every screen while anything is running, and reading screens
+       * reload themselves every five seconds while it is up. One crashed job would leave the whole
+       * product permanently reloading and permanently claiming to be busy, with nothing the
+       * operator could press to clear it.
+       *
+       * Re-thrown afterwards, so Trigger.dev still sees the failure, still retries if configured
+       * to, and still records it in its own log. This only makes the operator's screen honest.
+       */
+      await progress.finish({
+        ok: false,
+        detail: `It stopped with an error: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      throw err;
     }
-
-    // Re-asked rather than reused. A crawl can end in `no_website` or a temporary DNS failure, and
-    // measuring PageSpeed for a site the crawler never reached would spend a request to learn
-    // nothing. The `pagespeed_outcome` field is the record of "we already tried this one".
-    const toMeasure = await idsWithoutPageSpeed(db, explicit, payload.limit ?? 5000);
-
-    let measured = 0;
-    for (let i = 0; i < toMeasure.length; i += BATCH_SIZE) {
-      const chunk = toMeasure.slice(i, i + BATCH_SIZE);
-      await pageSpeedTask.batchTriggerAndWait(chunk.map((id) => ({ payload: { businessId: id } })));
-      measured += chunk.length;
-      logger.info("measured", { done: measured, of: toMeasure.length });
-    }
-
-    // YouTube (O8) last, because it is the only step that can run out rather than finish. It stops
-    // itself when the daily quota is gone and leaves the rest for tomorrow, so putting it here
-    // means a quota that ran out never costs the crawl, the speed test or the scores.
-    let youtube: { checked: number; remaining: number; stoppedOnQuota: boolean } = {
-      checked: 0,
-      remaining: 0,
-      stoppedOnQuota: false,
-    };
-    const youtubeRun = await youTubeRunTask.triggerAndWait({});
-    if (youtubeRun.ok) youtube = youtubeRun.output;
-    else logger.warn("YouTube pass did not complete; scores below are otherwise unaffected");
-
-    // Scores everything analysed, not only this batch. Rescoring is pure arithmetic over findings
-    // already stored — no crawl, no cost — and running it whole means one set of weights applies
-    // to the entire list rather than the newest rows carrying a different vintage.
-    await scoreRunTask.triggerAndWait({});
-
-    // Last, because it is the only step that reads what the crawl wrote. A rule looking for
-    // "embroidery" on a website needs the website to have been read first.
-    let categorised = 0;
-    if (payload.categoriseAll) {
-      const run = await categoriseRunTask.triggerAndWait({});
-      if (run.ok) categorised = run.output.categorised;
-    } else if (toCategorise.length > 0) {
-      const run = await categoriseRunTask.triggerAndWait({ businessIds: toCategorise });
-      if (run.ok) categorised = run.output.categorised;
-    }
-
-    logger.info("analysis finished", { audited, measured, categorised, youtube });
-    return { audited, measured, categorised, youtube };
   },
 });
 

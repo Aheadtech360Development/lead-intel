@@ -105,7 +105,52 @@ const CHAIN_DOMAINS = new Set([
   // `normalizeDomain`, leaving both holding the identical domain key.
   "bigfrog.com",
   "instantimprints.com",
+  // Added when the demand rule promoted a FASTSIGNS branch to Tier 1. It has no website on its
+  // listing, so only the name check could ever see it — which is precisely the case that check was
+  // written for, and precisely why the list has to keep growing.
+  "fastsigns.com",
+  "signarama.com",
+  "minutemanpress.com",
+  "alphagraphics.com",
 ]);
+
+/**
+ * Whether a business **name** looks like one of the chains above.
+ *
+ * A separate and deliberately weaker signal than the domain match, for a case the domain match
+ * cannot see: a chain whose Google listing carries no website at all. "Office Depot Print & Copy
+ * Services" reached Tier 1 that way — 77 reviews, no domain, nothing for `sharedPlatformDomain` to
+ * catch.
+ *
+ * **This returns a suspicion, never a verdict, and callers must not exclude on it.** Domains belong
+ * to one company; names do not. "Michaels" is a craft chain and also the possessive of a very
+ * common first name, and a list whose entire purpose is independent local businesses cannot afford
+ * to silence "Michael's Braids" to catch it. The comment on CHAIN_DOMAINS says guessing would
+ * silence real local businesses — that is truer of names than of domains, so this only ever raises
+ * a flag for a human to settle.
+ *
+ * Anchored at the start because chains lead with their brand — "Office Depot Print & Copy", "Target
+ * Optical", "Hobby Lobby". A business merely *mentioning* a chain later in its name is not one.
+ */
+export function nameMatchesChain(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const normalised = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (normalised.length === 0) return null;
+
+  // The longest match wins, not the first. "Target Optical" starts with both `target` and
+  // `targetoptical`, and iteration order would otherwise decide which chain gets named — reporting
+  // the parent when the listing is plainly the optical arm. The flag would be right either way; the
+  // name beside it would not.
+  let best: string | null = null;
+  for (const domain of CHAIN_DOMAINS) {
+    const brand = domain.slice(0, domain.lastIndexOf("."));
+    // Four characters is the shortest brand here that is not also an ordinary English word; below
+    // that the token matches far too much to be worth showing anyone.
+    if (brand.length < 4 || !normalised.startsWith(brand)) continue;
+    if (best === null || brand.length > best.slice(0, best.lastIndexOf(".")).length) best = domain;
+  }
+  return best;
+}
 
 export type SharedDomainKind = "platform" | "chain";
 

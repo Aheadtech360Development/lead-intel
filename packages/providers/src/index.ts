@@ -1,3 +1,6 @@
+// The key readers, so a task can check its configuration before it starts work rather than
+// discovering three layers down that it cannot finish.
+export * from "./config.js";
 export * from "./google-places/place-details.js";
 export * from "./google-places/resolve-center.js";
 export * from "./google-places/search-text.js";
@@ -15,3 +18,4 @@ export * from "./apify/run-actor.js";
 export * from "./apify/instagram-profile.js";
 export * from "./apify/meta-ads.js";
 export * from "./gemini/generate.js";
+export * from "./storage/index.js";

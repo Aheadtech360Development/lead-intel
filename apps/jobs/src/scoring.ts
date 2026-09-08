@@ -1,7 +1,13 @@
-import { scoreBusiness, sharedPlatformDomain, type BusinessScore, type CheckResult } from "@lead-intel/core";
-import { businesses, describeDbError, findings, identityKeys, type Database } from "@lead-intel/db";
+import {
+  nameMatchesChain,
+  scoreBusiness,
+  sharedPlatformDomain,
+  type BusinessScore,
+  type CheckResult,
+} from "@lead-intel/core";
+import { businesses, describeDbError, fieldMetadata, findings, identityKeys, type Database } from "@lead-intel/db";
 import type { ManualReviewReason, WebsiteStatus } from "@lead-intel/shared";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 /**
  * Reads a business's stored findings back out of the database, scores them under §6, and writes
@@ -29,7 +35,11 @@ export async function scoreAndStore(db: Database, businessId: string): Promise<B
     .where(eq(findings.businessId, businessId));
 
   const [business] = await db
-    .select({ websiteStatus: businesses.websiteStatus, manualReviewReasons: businesses.manualReviewReasons })
+    .select({
+      displayName: businesses.displayName,
+      websiteStatus: businesses.websiteStatus,
+      manualReviewReasons: businesses.manualReviewReasons,
+    })
     .from(businesses)
     .where(eq(businesses.id, businessId))
     .limit(1);
@@ -56,15 +66,59 @@ export async function scoreAndStore(db: Database, businessId: string): Promise<B
     .limit(1);
   const sharedDomain = sharedPlatformDomain(domainKey?.value ?? null);
 
+  /**
+   * Reviews, rating and followers — read for one narrow purpose.
+   *
+   * They carry a business only when its Google listing shows no website and nothing else could be
+   * measured; see packages/core/src/scoring/demand.ts. Fetched for every business regardless,
+   * because a conditional read here would mean the scoring result depended on the order things
+   * were checked in.
+   */
+  const signalRows = await db
+    .select({ fieldName: fieldMetadata.fieldName, value: fieldMetadata.value })
+    .from(fieldMetadata)
+    .where(
+      and(
+        eq(fieldMetadata.businessId, businessId),
+        inArray(fieldMetadata.fieldName, ["rating", "review_count", "instagram_followers"]),
+      ),
+    );
+
+  // Parsed strictly: a value that will not parse is unknown, never zero. Zero reviews and "nobody
+  // has looked" are different facts, and only one of them is a judgement about the business.
+  const signal = (name: string): number | null => {
+    const raw = signalRows.find((r) => r.fieldName === name)?.value;
+    if (raw === undefined) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
+
   const score = scoreBusiness({
     findings: checkResults,
     presence: business.websiteStatus as WebsiteStatus,
     sharedDomainReason: sharedDomain?.reason ?? null,
+    demand: {
+      reviewCount: signal("review_count"),
+      rating: signal("rating"),
+      instagramFollowers: signal("instagram_followers"),
+    },
   });
 
   // The audit may already have flagged this record for a reason scoring knows nothing about
   // (an unreadable site, a shared phone). Merging rather than replacing keeps both.
   const merged = [...new Set([...(business.manualReviewReasons ?? []), ...score.manualReviewReasons])] as ManualReviewReason[];
+
+  /**
+   * A chain the domain guard could not see, because it has no domain.
+   *
+   * "Office Depot Print & Copy Services" was promoted to Tier 1 by the demand rule above: 4.3 stars
+   * from 77 reviews and no website on its listing, so `sharedPlatformDomain` had nothing to match.
+   * Flagged rather than excluded — see `nameMatchesChain` for why a name is not enough to act on,
+   * and why silencing "Michael's Braids" to catch "Michaels" would be the worse mistake.
+   */
+  if (nameMatchesChain(business.displayName) && !merged.includes("name_matches_chain")) {
+    merged.push("name_matches_chain");
+  }
 
   try {
     await db

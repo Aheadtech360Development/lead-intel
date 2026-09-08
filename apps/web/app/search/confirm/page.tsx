@@ -52,7 +52,7 @@ export default async function ConfirmSearchPage({
       <p style={{ marginBottom: 4 }}>
         <Link href="/search">&larr; Change search</Link>
       </p>
-      <h1 style={{ fontSize: 28, margin: "0 0 6px" }}>Confirm before spending anything</h1>
+      <h1 style={{ fontSize: 31, margin: "0 0 6px" }}>Confirm before spending anything</h1>
       <p style={{ color: "var(--ink-3)", margin: "0 0 22px" }}>
         Nothing has been searched yet — this is Stage 0 (Plan). Nothing is charged until you
         start discovery below.
@@ -67,7 +67,7 @@ export default async function ConfirmSearchPage({
             border: "1px solid #d3ac71",
             borderRadius: 3,
             color: "var(--warn-ink)",
-            fontSize: 14.5,
+            fontSize: 16,
           }}
         >
           {params.error}
@@ -75,7 +75,7 @@ export default async function ConfirmSearchPage({
       )}
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--rule)", borderRadius: 3, padding: 24, marginBottom: 20 }}>
-        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 10, columnGap: 16, fontSize: 14.5 }}>
+        <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 10, columnGap: 16, fontSize: 16 }}>
           <dt style={{ color: "var(--ink-3)" }}>Niche</dt>
           <dd style={{ margin: 0 }}>{niche}</dd>
           <dt style={{ color: "var(--ink-3)" }}>Location</dt>
@@ -91,7 +91,7 @@ export default async function ConfirmSearchPage({
               {centsToDollars(requestsToCents(estimate.maxRequestsWithoutSubdivision))}</span>
           </dd>
         </dl>
-        <p style={{ margin: "16px 0 0", fontSize: 13, color: "var(--ink-3)", borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
+        <p style={{ margin: "16px 0 0", fontSize: 14.5, color: "var(--ink-3)", borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
           Google's free allowance is 1,000 Places searches + 10,000 geocoding lookups per month,
           so a run in the likely range above usually costs <strong>$0</strong> in practice.
         </p>
@@ -108,7 +108,7 @@ export default async function ConfirmSearchPage({
           background: hasSpendLimit ? "var(--surface-2)" : "var(--warn-bg)",
           border: `1px solid ${hasSpendLimit ? "var(--rule)" : "#d3ac71"}`,
           borderRadius: 3,
-          fontSize: 14,
+          fontSize: 15.5,
           color: hasSpendLimit ? "var(--ink-2)" : "var(--warn-ink)",
         }}
       >
@@ -140,7 +140,7 @@ export default async function ConfirmSearchPage({
         <input type="hidden" name="radiusMiles" value={String(radiusMiles)} />
         {params.maxBusinesses && <input type="hidden" name="maxBusinesses" value={params.maxBusinesses} />}
         {params.maxSpendDollars && <input type="hidden" name="maxSpendDollars" value={params.maxSpendDollars} />}
-        <p style={{ margin: "0 0 16px", fontSize: 14.5, color: "var(--ink-3)" }}>
+        <p style={{ margin: "0 0 16px", fontSize: 16, color: "var(--ink-3)" }}>
           {params.maxBusinesses
             ? `Stops after ${params.maxBusinesses} businesses. `
             : "No business limit set — "}

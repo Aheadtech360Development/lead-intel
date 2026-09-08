@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -13,11 +12,22 @@
   },
   "dependencies": {
     "@lead-intel/shared": "0.1.0",
+    "playwright": "1.57.0",
     "robots-parser": "^3.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "typescript": "^5.6.3",
     "vitest": "^4.1.10"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./render": {
+      "types": "./dist/render/index.d.ts",
+      "default": "./dist/render/index.js"
+    }
   }
 }

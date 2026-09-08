@@ -9,7 +9,7 @@ import {
 import Link from "next/link";
 import { instagramCandidateIds } from "@/lib/instagram-candidates";
 import { createClient } from "@/lib/supabase/server";
-import { AppShell, Banner, Note, PANEL, Panel } from "../../ui";
+import { AppShell, Banner, Money, Note, PANEL, Panel } from "../../ui";
 import { buyEnrichment } from "./actions";
 
 /**
@@ -101,7 +101,7 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
     return (
       <Shell>
         <Panel title="Nothing selected">
-          <div style={{ padding: 20, fontSize: 14.5, color: "var(--ink-2)" }}>
+          <div style={{ padding: 20, fontSize: 16, color: "var(--ink-2)" }}>
             Tick the businesses you want paid data for, then press the button.{" "}
             <Link href="/records">Back to the list</Link>
           </div>
@@ -145,8 +145,8 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
 
   return (
     <Shell>
-      <h1 style={{ fontSize: 25, margin: "0 0 4px" }}>Buy extra data for {businessIds.length} businesses</h1>
-      <p style={{ color: "var(--ink-3)", margin: "0 0 20px", fontSize: 14.5, maxWidth: 760 }}>
+      <h1 style={{ fontSize: 27, margin: "0 0 4px" }}>Buy extra data for {businessIds.length} businesses</h1>
+      <p style={{ color: "var(--ink-3)", margin: "0 0 20px", fontSize: 16, maxWidth: 760 }}>
         {arrivedBy === "filter"
           ? "Everything currently matching your filter. "
           : "The ones you ticked. "}
@@ -185,38 +185,52 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
                 />
                 <span style={{ flex: 1 }}>
                   <span style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-                    <strong style={{ fontSize: 16 }}>{source.label}</strong>
-                    <strong style={{ fontSize: 16, whiteSpace: "nowrap" }}>
+                    <strong style={{ fontSize: 17.5 }}>{source.label}</strong>
+                    {/*
+                      * The sum written out, not just its answer.
+                      *
+                      * "$0.47" on its own is the thing the operator said they could not read - it
+                      * does not say what is being bought, for how many, or by whom. Written as
+                      * "0.26c each x 47 businesses = $0.13, billed by Apify" there is nothing left
+                      * to guess at.
+                      *
+                      * The unit price is shown exactly; the total is rounded UP, because a confirm
+                      * screen must never quote less than what will actually be charged.
+                      */}
+                    <span style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                       {source.willBuy === 0 ? (
-                        <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>nothing to buy</span>
+                        <span style={{ color: "var(--ink-2)", fontSize: 16 }}>Nothing left to buy</span>
                       ) : (
                         <>
-                          {formatCents(source.costCentsEach)} × {source.willBuy} ={" "}
-                          {/* The real price even when the source is not connected — showing $0.00
-                              next to something that costs $2.19 is the kind of small lie that
-                              makes an operator stop trusting the screen. */}
-                          <span style={{ color: source.unavailable ? "var(--ink-3)" : "var(--accent)" }}>
+                          <strong style={{ fontSize: 19, color: source.unavailable ? "var(--ink-3)" : "var(--money-ink)" }}>
                             {formatCents(source.wouldCostCents)}
+                          </strong>
+                          <span style={{ display: "block", fontSize: 14.5, color: "var(--ink-2)", fontWeight: 400 }}>
+                            <Money cents={source.costCentsEach} /> each &times; {source.willBuy}{" "}
+                            {source.willBuy === 1 ? "business" : "businesses"}
+                          </span>
+                          <span style={{ display: "block", fontSize: 14, color: "var(--ink-2)", fontWeight: 400 }}>
+                            billed by <strong style={{ color: "var(--ink)" }}>{source.provider}</strong>
                           </span>
                         </>
                       )}
-                    </strong>
+                    </span>
                   </span>
 
-                  <div style={{ fontSize: 13.5, color: "var(--ink-2)", marginTop: 4 }}>{source.describes}</div>
-                  <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 3 }}>
-                    From {source.provider} · fills in {source.fills.join(", ")}
+                  <div style={{ fontSize: 15, color: "var(--ink-2)", marginTop: 4 }}>{source.describes}</div>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-2)", marginTop: 3 }}>
+                    Fills in {source.fills.join(", ")}
                   </div>
 
-                  <div style={{ marginTop: 9, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 13 }}>
+                  <div style={{ marginTop: 9, display: "flex", gap: 18, flexWrap: "wrap", fontSize: 14.5 }}>
                     {source.alreadyHave > 0 && (
-                      <span style={{ color: "var(--good-ink)" }}>
-                        ✓ {source.alreadyHave} already bought — free
+                      <span style={{ color: "var(--good-ink)", fontWeight: 650 }}>
+                        ✓ {source.alreadyHave} already paid for &mdash; they cost nothing again
                       </span>
                     )}
                     {source.cannotBuy > 0 && (
-                      <span style={{ color: "var(--ink-3)" }}>
-                        {source.cannotBuy} have nothing to look up
+                      <span style={{ color: "var(--ink-2)" }}>
+                        {source.cannotBuy} have nothing to look up, so they are skipped
                       </span>
                     )}
                   </div>
@@ -228,7 +242,7 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
                         padding: "9px 11px",
                         background: "var(--accent-bg)",
                         borderRadius: 4,
-                        fontSize: 13,
+                        fontSize: 14.5,
                         color: "var(--warn-ink)",
                       }}
                     >
@@ -236,7 +250,7 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
                     </div>
                   )}
                   {definition.requiresEnvVar && (
-                    <div style={{ marginTop: 8, fontSize: 13, color: "var(--ink-3)" }}>
+                    <div style={{ marginTop: 8, fontSize: 14.5, color: "var(--ink-3)" }}>
                       Not connected yet — needs <code>{definition.requiresEnvVar}</code> in{" "}
                       <code>apps/jobs/.env</code>. It is listed here so you can see the option and
                       the price; it cannot be bought until the key is in place.
@@ -249,7 +263,7 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
         })}
 
         {hiddenByHand.length > 0 && (
-          <div style={{ ...PANEL, padding: "14px 17px", fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+          <div style={{ ...PANEL, padding: "14px 17px", fontSize: 15, color: "var(--ink-2)", lineHeight: 1.6 }}>
             <strong>
               {hiddenByHand.map((s) => ENRICHMENT_DEFINITIONS[s].label).join(", ")} is not offered here.
             </strong>{" "}
@@ -264,7 +278,7 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
         <div style={{ ...PANEL, padding: "18px" }}>
           <div style={{ display: "flex", gap: 22, alignItems: "flex-end", flexWrap: "wrap" }}>
             <span>
-              <div style={{ fontSize: 13, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-3)" }}>
+              <div style={{ fontSize: 14.5, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-3)" }}>
                 Never spend more than
               </div>
               <input
@@ -275,7 +289,7 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
                 defaultValue={(DEFAULT_ENRICHMENT_SPEND_CAP_CENTS / 100).toFixed(2)}
                 style={{
                   padding: "8px 10px",
-                  fontSize: 15,
+                  fontSize: 16.5,
                   width: 120,
                   border: "1px solid var(--rule)",
                   borderRadius: 4,
@@ -284,7 +298,7 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
               />
             </span>
             <span style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
-              <Link href="/records" style={{ fontSize: 14.5 }}>
+              <Link href="/records" style={{ fontSize: 16 }}>
                 Cancel
               </Link>
               <button className="btn" type="submit">
@@ -343,6 +357,7 @@ async function candidatesFor(
 function Shell({ children }: { children: React.ReactNode }) {
   return (
     <AppShell
+      autoRefresh={false}
       back={{ href: "/records", label: "Back to leads" }}
       title="Buy extra data"
       what="Nothing here is bought until you confirm. Anything already bought is shown as free, and a spend cap stops a run that goes further than you expected."

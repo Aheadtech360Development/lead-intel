@@ -2,7 +2,16 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    // "DOM" is here for one file. The callback inside `measureLayout`'s `page.evaluate()` is
+    // serialised and executed by Chromium, not by Node, so `window` and `document` are genuinely
+    // present where it runs and genuinely absent everywhere else in this package.
+    //
+    // The cost is that TypeScript will now also accept `document` in a file that runs under Node,
+    // where it would throw at runtime. That trade is taken knowingly: the alternatives are worse —
+    // writing the browser code as an unchecked string, or hand-declaring the slice of the DOM this
+    // uses and keeping that declaration honest by hand.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
   "include": ["src/**/*"],
   "exclude": ["src/**/*.test.ts"]

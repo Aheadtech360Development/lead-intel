@@ -281,8 +281,8 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
               borderColor: "var(--social)",
             }}
           >
-            <span style={{ flex: "1 1 340px", fontSize: 14, lineHeight: 1.55 }}>
-              <strong style={{ fontSize: 15 }}>
+            <span style={{ flex: "1 1 340px", fontSize: 15.5, lineHeight: 1.55 }}>
+              <strong style={{ fontSize: 16.5 }}>
                 {buyAllCount.toLocaleString()} accounts are linked but never looked up
                 {current.from ? ` in “${current.from === "imported" ? "from a file I imported" : "found by search"}”` : ""}.
               </strong>
@@ -455,7 +455,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                   : "Everything with an Instagram link."
               }
               right={
-                <span style={{ display: "flex", gap: 10, fontSize: 13 }}>
+                <span style={{ display: "flex", gap: 10, fontSize: 14.5 }}>
                   {[
                     ["followers", "Most followers"],
                     ["problem", "Worst website"],
@@ -476,7 +476,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
               }
             >
               {sorted.length === 0 ? (
-                <div style={{ padding: "34px 20px", textAlign: "center", color: "var(--ink-3)", fontSize: 14 }}>
+                <div style={{ padding: "34px 20px", textAlign: "center", color: "var(--ink-3)", fontSize: 15.5 }}>
                   Nothing matches those filters. <Link href="/instagram">Clear them</Link>.
                 </div>
               ) : (
@@ -511,7 +511,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                             <Link href={`/records/${r.id}`} style={{ fontWeight: 600 }}>
                               {r.name}
                             </Link>
-                            <div style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                            <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                               {r.where}
                               {r.origin === "imported" && r.batch ? ` · ${batchNames.get(r.batch) ?? "a file"}` : ""}
                             </div>
@@ -522,12 +522,12 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                                 href={`https://instagram.com/${r.handle}`}
                                 target="_blank"
                                 rel="noreferrer noopener"
-                                style={{ fontSize: 13.5 }}
+                                style={{ fontSize: 15 }}
                               >
                                 @{r.handle} &#8599;
                               </a>
                             ) : r.url ? (
-                              <a href={r.url} target="_blank" rel="noreferrer noopener" style={{ fontSize: 13 }}>
+                              <a href={r.url} target="_blank" rel="noreferrer noopener" style={{ fontSize: 14.5 }}>
                                 their account &#8599;
                               </a>
                             ) : null}
@@ -538,7 +538,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                           </td>
                           <td style={{ ...TD, fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
                             {r.followers === null ? (
-                              <span style={{ color: "var(--ink-3)", fontWeight: 400, fontSize: 13 }}>
+                              <span style={{ color: "var(--ink-3)", fontWeight: 400, fontSize: 14.5 }}>
                                 {r.isPrivate ? "withheld" : "not looked up"}
                               </span>
                             ) : (
@@ -548,10 +548,10 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                           <td style={{ ...TD, fontVariantNumeric: "tabular-nums" }}>
                             {r.posts === null ? <span style={{ color: "var(--ink-3)" }}>—</span> : r.posts.toLocaleString()}
                           </td>
-                          <td style={{ ...TD, fontSize: 13.5 }}>
+                          <td style={{ ...TD, fontSize: 15 }}>
                             {r.igCategory ?? <span style={{ color: "var(--ink-3)" }}>—</span>}
                           </td>
-                          <td style={{ ...TD, fontSize: 13.5 }}>
+                          <td style={{ ...TD, fontSize: 15 }}>
                             {r.myCategory ? (
                               <>
                                 {r.myCategory}
@@ -565,9 +565,9 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                             {r.adsRunning === "true" ? (
                               <Badge tone="money">live</Badge>
                             ) : r.adsRunning === "false" ? (
-                              <span style={{ color: "var(--ink-3)", fontSize: 13 }}>none</span>
+                              <span style={{ color: "var(--ink-3)", fontSize: 14.5 }}>none</span>
                             ) : (
-                              <span style={{ color: "var(--ink-3)", fontSize: 13 }}>—</span>
+                              <span style={{ color: "var(--ink-3)", fontSize: 14.5 }}>—</span>
                             )}
                           </td>
                           <td style={TD}>
@@ -592,7 +592,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                     <button className="btn" type="submit">
                       Get Instagram for the ones I ticked
                     </button>
-                    <span style={{ fontSize: 13, color: "var(--ink-3)" }}>
+                    <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                       {formatCents(ENRICHMENT_DEFINITIONS.instagram_profile.costCents)} each. The next
                       screen prices exactly what you ticked and asks again — anything already bought
                       is shown as free.
@@ -643,11 +643,11 @@ function Fig({
   const colour = tone === "plain" ? "var(--ink-3)" : `var(--${tone})`;
   return (
     <div style={{ ...PANEL, marginBottom: 0, padding: "14px 16px", flex: "1 1 190px", minWidth: 175 }}>
-      <div style={{ fontSize: 27, fontWeight: 700, lineHeight: 1.1, color: colour, fontVariantNumeric: "tabular-nums" }}>
+      <div style={{ fontSize: 30, fontWeight: 700, lineHeight: 1.1, color: colour, fontVariantNumeric: "tabular-nums" }}>
         {value.toLocaleString()}
       </div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
-      <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 2 }}>{hint}</div>
+      <div style={{ fontSize: 14.5, fontWeight: 600, color: "var(--ink-2)", marginTop: 3 }}>{label}</div>
+      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2 }}>{hint}</div>
     </div>
   );
 }

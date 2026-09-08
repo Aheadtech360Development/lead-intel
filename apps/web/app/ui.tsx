@@ -13,6 +13,8 @@
  */
 
 import Link from "next/link";
+import { loadRunningJobs } from "@/lib/job-runs";
+import { RunningJobs } from "./running-jobs";
 
 export type Tone = "brand" | "good" | "warn" | "bad" | "info" | "money" | "social" | "plain";
 
@@ -24,7 +26,17 @@ export function toneVars(tone: Tone): { fg: string; ink: string; bg: string } {
 
 // ---------------------------------------------------------------- app shell
 
-export type NavKey = "dashboard" | "leads" | "instagram" | "search" | "import" | "categories" | "spend";
+export type NavKey =
+  | "dashboard"
+  | "leads"
+  | "mine"
+  | "instagram"
+  | "search"
+  | "import"
+  | "categories"
+  | "checklists"
+  | "rules"
+  | "spend";
 
 /**
  * Every page in the product, in one list, in the order they are used.
@@ -49,6 +61,14 @@ export const NAV: { key: NavKey; href: string; icon: string; label: string; what
     icon: "🎯",
     label: "Leads",
     what: "The call list. Ordered so the best call is the first row.",
+    group: "Overview",
+  },
+  {
+    key: "mine",
+    href: "/records?claimed=me&view=everything",
+    icon: "🙋",
+    label: "My leads",
+    what: "The leads you have claimed. Claiming one put your name on it and then gave you nowhere to find it again.",
     group: "Overview",
   },
   {
@@ -84,6 +104,22 @@ export const NAV: { key: NavKey; href: string; icon: string; label: string; what
     group: "Set up",
   },
   {
+    key: "checklists",
+    href: "/checklists",
+    icon: "✓",
+    label: "Checklists",
+    what: "What a good page looks like, in your words — judged against every page audited.",
+    group: "Set up",
+  },
+  {
+    key: "rules",
+    href: "/rules",
+    icon: "📖",
+    label: "How it works",
+    what: "Every rule in the product, in plain words: what runs, where it runs, what it costs, and what it cannot do.",
+    group: "Set up",
+  },
+  {
     key: "spend",
     href: "/spend",
     icon: "💳",
@@ -100,7 +136,7 @@ export const NAV: { key: NavKey; href: string; icon: string; label: string; what
  * of room, but the real gain is orientation — the rail is always visible, always in the same
  * order, and shows where you are without having to be read.
  */
-export function AppShell({
+export async function AppShell({
   current,
   email,
   signOutAction,
@@ -110,6 +146,7 @@ export function AppShell({
   back,
   children,
   wide = false,
+  autoRefresh = true,
 }: {
   current?: NavKey;
   email?: string | null;
@@ -124,14 +161,30 @@ export function AppShell({
   children: React.ReactNode;
   /** The leads table needs the room; reading-width pages do not. */
   wide?: boolean;
+  /**
+   * Whether this screen may reload itself while a job is running.
+   *
+   * Off for anything with a form the operator types into. Five-second reloads are how a
+   * half-written checklist rule disappears mid-sentence, and a progress bar is not worth somebody's
+   * work. Those screens still show the banner, with a link to refresh when they are ready.
+   */
+  autoRefresh?: boolean;
 }) {
   const groups = [...new Set(NAV.map((n) => n.group))];
+
+  /**
+   * The queue, fetched here rather than passed in.
+   *
+   * Every page would otherwise have to remember, and the page that forgot would be exactly the one
+   * where the operator sat watching a screen that never changed. One query, one index, every screen.
+   */
+  const runningJobs = await loadRunningJobs();
 
   return (
     <div className="shell">
       <nav className="rail">
         <Link href="/dashboard" className="rail-brand">
-          <span aria-hidden style={{ fontSize: 19 }}>◈</span>
+          <span aria-hidden style={{ fontSize: 20.5 }}>◈</span>
           Lead Intel
         </Link>
 
@@ -157,7 +210,7 @@ export function AppShell({
 
         <div style={{ marginTop: "auto", paddingTop: 18 }}>
           {email ? (
-            <div style={{ fontSize: 13, color: "var(--ink-3)", padding: "0 10px 8px", wordBreak: "break-all" }}>
+            <div style={{ fontSize: 14.5, color: "var(--ink-3)", padding: "0 10px 8px", wordBreak: "break-all" }}>
               {email}
             </div>
           ) : null}
@@ -178,21 +231,26 @@ export function AppShell({
         {(title || back || actions) && (
           <header className="topbar">
             {back ? (
-              <Link href={back.href} style={{ fontSize: 14.5, fontWeight: 600 }}>
+              <Link href={back.href} style={{ fontSize: 16, fontWeight: 600 }}>
                 ← {back.label}
               </Link>
             ) : (
               <div style={{ minWidth: 0 }}>
-                <h1 style={{ fontSize: 20, margin: 0, lineHeight: 1.25 }}>{title}</h1>
+                <h1 style={{ fontSize: 22, margin: 0, lineHeight: 1.25 }}>{title}</h1>
               </div>
             )}
             {actions ? <div style={{ marginLeft: "auto", display: "flex", gap: 9, flexWrap: "wrap" }}>{actions}</div> : null}
           </header>
         )}
 
-        <main style={{ padding: "22px 30px 0", maxWidth: wide ? 1680 : 1180, margin: "0 auto" }}>
+        {/* `wide` now means the full width of the window rather than 1680px. The leads table has a
+              1290px minimum, so on a wide screen the old cap left an empty band down each side while
+              the table still scrolled sideways inside it — the worst of both. Reading-width pages keep
+              their cap, because a paragraph 1900px wide is unreadable for the opposite reason. */}
+          <main style={{ padding: "22px 30px 0", maxWidth: wide ? "100%" : 1180, margin: "0 auto" }}>
+          <RunningJobs jobs={runningJobs} autoRefresh={autoRefresh} />
           {what ? (
-            <p style={{ margin: "0 0 20px", fontSize: 14.5, color: "var(--ink-3)", maxWidth: 760, lineHeight: 1.55 }}>
+            <p style={{ margin: "0 0 20px", fontSize: 16.5, color: "var(--ink-2)", maxWidth: 820, lineHeight: 1.6 }}>
               {what}
             </p>
           ) : null}
@@ -215,13 +273,13 @@ export const PANEL: React.CSSProperties = {
 
 export const PANEL_HEAD: React.CSSProperties = { padding: "14px 18px 12px", borderBottom: "1px solid var(--rule)" };
 
-export const PANEL_TITLE: React.CSSProperties = { fontSize: 15, fontWeight: 700, margin: 0, color: "var(--ink)" };
+export const PANEL_TITLE: React.CSSProperties = { fontSize: 18, fontWeight: 750, margin: 0, color: "var(--ink)" };
 
 export const PANEL_HINT: React.CSSProperties = {
-  fontSize: 13,
-  color: "var(--ink-3)",
-  margin: "3px 0 0",
-  lineHeight: 1.45,
+  fontSize: 14.5,
+  color: "var(--ink-2)",
+  margin: "4px 0 0",
+  lineHeight: 1.5,
 };
 
 export function Panel({
@@ -257,8 +315,8 @@ export function SectionHeading({ title, hint, right }: { title: string; hint?: s
   return (
     <div style={{ display: "flex", alignItems: "flex-end", gap: 16, margin: "26px 0 12px" }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <h2 style={{ fontSize: 17.5, margin: 0 }}>{title}</h2>
-        {hint ? <p style={{ fontSize: 13.5, color: "var(--ink-3)", margin: "2px 0 0" }}>{hint}</p> : null}
+        <h2 style={{ fontSize: 19, margin: 0 }}>{title}</h2>
+        {hint ? <p style={{ fontSize: 15, color: "var(--ink-3)", margin: "2px 0 0" }}>{hint}</p> : null}
       </div>
       {right}
     </div>
@@ -293,12 +351,12 @@ export function InfoBox({ title, children, tone = "info" }: { title?: string; ch
         borderRadius: "0 var(--radius) var(--radius) 0",
         padding: "14px 18px",
         marginBottom: 18,
-        fontSize: 14.5,
+        fontSize: 16,
         lineHeight: 1.65,
         color: "var(--ink-2)",
       }}
     >
-      {title ? <div style={{ fontWeight: 700, color: c.ink, marginBottom: 5, fontSize: 15 }}>{title}</div> : null}
+      {title ? <div style={{ fontWeight: 700, color: c.ink, marginBottom: 5, fontSize: 16.5 }}>{title}</div> : null}
       {children}
     </div>
   );
@@ -324,7 +382,7 @@ export function Banner({ tone, children }: { tone: Tone; children: React.ReactNo
         borderRadius: "0 6px 6px 0",
         padding: "12px 16px",
         marginBottom: 14,
-        fontSize: 14.5,
+        fontSize: 16,
         lineHeight: 1.6,
         color: "var(--ink)",
       }}
@@ -345,7 +403,7 @@ export function Note({ children, tone = "plain" }: { children: React.ReactNode; 
       style={{
         margin: 0,
         padding: "11px 18px",
-        fontSize: 13.4,
+        fontSize: 14.5,
         lineHeight: 1.55,
         color: tone === "warn" ? "var(--warn-ink)" : "var(--ink-3)",
         background: tone === "warn" ? c.bg : "transparent",
@@ -395,17 +453,17 @@ export function StatCard({
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: 15,
+              fontSize: 16.5,
             }}
           >
             {icon}
           </span>
         ) : null}
-        <span style={{ fontSize: 13, fontWeight: 650, color: "var(--ink-2)" }}>{label}</span>
+        <span style={{ fontSize: 14.5, fontWeight: 650, color: "var(--ink-2)" }}>{label}</span>
       </div>
       <div
         style={{
-          fontSize: 30,
+          fontSize: 34,
           fontWeight: 750,
           lineHeight: 1.05,
           color: tone === "plain" ? "var(--ink)" : c.ink,
@@ -415,7 +473,7 @@ export function StatCard({
         {value}
       </div>
       {explain ? (
-        <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 5, lineHeight: 1.42 }}>{explain}</div>
+        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 5, lineHeight: 1.42 }}>{explain}</div>
       ) : null}
     </>
   );
@@ -487,10 +545,10 @@ export function BarRow({
   const pct = total > 0 ? Math.round((count / total) * 100) : 0;
   const body = (
     <>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5, marginBottom: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 4 }}>
         <span style={{ color: "var(--ink-2)" }}>{label}</span>
         <span style={{ color: "var(--ink-3)", fontVariantNumeric: "tabular-nums" }}>
-          {count} <span style={{ fontSize: 12 }}>({pct}%)</span>
+          {count} <span style={{ fontSize: 13.5 }}>({pct}%)</span>
         </span>
       </div>
       <Meter value={pct} tone={tone} height={7} />
@@ -513,7 +571,7 @@ export function BarRow({
 export function ScoreBars({ problem, intent }: { problem: number | null; intent: number | null }) {
   const line = (text: string, value: number | null, tone: "problem" | "good") => (
     <div style={{ marginBottom: 5 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 2 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5, marginBottom: 2 }}>
         <span style={{ color: "var(--ink-3)" }}>{text}</span>
         <span style={{ color: "var(--ink-2)", fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>
           {value === null ? "—" : value}
@@ -558,7 +616,7 @@ export function Funnel({
           <>
             <div
               style={{
-                fontSize: 27,
+                fontSize: 30,
                 fontWeight: 750,
                 lineHeight: 1.05,
                 color: (step.tone ?? "plain") === "plain" ? "var(--ink)" : c.ink,
@@ -567,8 +625,8 @@ export function Funnel({
             >
               {step.value}
             </div>
-            <div style={{ fontSize: 13, fontWeight: 650, color: "var(--ink-2)", marginTop: 2 }}>{step.label}</div>
-            <div style={{ fontSize: 13, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.38, minHeight: 32 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 650, color: "var(--ink-2)", marginTop: 2 }}>{step.label}</div>
+            <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.38, minHeight: 32 }}>
               {step.explain}
             </div>
             <div style={{ marginTop: 9, height: 5, background: "var(--surface-3)", borderRadius: 99, overflow: "hidden" }}>
@@ -622,13 +680,13 @@ export function NextAction({
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
           {icon ? (
-            <span aria-hidden style={{ fontSize: 17 }}>
+            <span aria-hidden style={{ fontSize: 18.5 }}>
               {icon}
             </span>
           ) : null}
-          <span style={{ fontSize: 15.5, fontWeight: 700 }}>{title}</span>
+          <span style={{ fontSize: 17, fontWeight: 700 }}>{title}</span>
         </div>
-        <div style={{ fontSize: 13.6, color: "var(--ink-3)", lineHeight: 1.55 }}>{body}</div>
+        <div style={{ fontSize: 15, color: "var(--ink-3)", lineHeight: 1.55 }}>{body}</div>
       </div>
       <div style={{ marginTop: "auto" }}>{action}</div>
     </div>
@@ -644,7 +702,7 @@ export function Badge({ children, tone = "plain" }: { children: React.ReactNode;
         display: "inline-block",
         padding: "2px 8px",
         borderRadius: 99,
-        fontSize: 13,
+        fontSize: 14.5,
         fontWeight: 650,
         background: c.bg,
         color: tone === "plain" ? "var(--ink-2)" : c.ink,
@@ -652,6 +710,169 @@ export function Badge({ children, tone = "plain" }: { children: React.ReactNode;
       }}
     >
       {children}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------- facts
+
+/**
+ * One known thing about a business: what it is, what it says, and where it came from.
+ *
+ * The third line is the point. This product mixes facts from five sources of very different
+ * reliability — Google's own listing, a crawl of their website, a paid Instagram lookup, a CSV
+ * somebody uploaded, and a person typing — and a screen that shows them all in the same grey text
+ * teaches the operator to trust them equally. They should not.
+ *
+ * `missing` is said out loud rather than left blank, because a blank space cannot distinguish
+ * "they have none" from "nobody has looked yet", and this codebase has been bitten by that
+ * confusion in the scoring, the checklists, the crawler and the critique.
+ */
+export function Fact({
+  label,
+  value,
+  from,
+  missing = "Not known",
+  size = "normal",
+  tone,
+}: {
+  label: string;
+  value: React.ReactNode;
+  /** Where it came from, in the operator's words: "their Google listing", "their own website". */
+  from?: string;
+  missing?: string;
+  size?: "normal" | "large";
+  tone?: Tone;
+}) {
+  const empty = value === null || value === undefined || value === "";
+  const c = tone ? toneVars(tone) : null;
+  return (
+    <div style={{ minWidth: 0 }}>
+      <div
+        style={{
+          fontSize: 13.5,
+          letterSpacing: "0.05em",
+          textTransform: "uppercase",
+          color: "var(--ink-2)",
+          fontWeight: 800,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: size === "large" ? 21 : 17,
+          fontWeight: 650,
+          lineHeight: 1.3,
+          marginTop: 3,
+          color: empty ? "var(--ink-3)" : c ? c.ink : "var(--ink)",
+          wordBreak: "break-word",
+        }}
+      >
+        {empty ? missing : value}
+      </div>
+      {from ? <div style={{ fontSize: 14, color: "var(--ink-2)", marginTop: 2, lineHeight: 1.4 }}>{from}</div> : null}
+    </div>
+  );
+}
+
+/** A row of facts that wraps. One shape for every group, so the eye learns it once. */
+export function FactGrid({ children, min = 190 }: { children: React.ReactNode; min?: number }) {
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))`,
+        gap: "18px 24px",
+        padding: "16px 18px",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Stars, drawn rather than described. A rating is compared at a glance or not at all. */
+export function Stars({ rating }: { rating: number }) {
+  const rounded = Math.round(rating * 2) / 2;
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <span aria-hidden style={{ color: "var(--warn)", letterSpacing: 1, fontSize: 17 }}>
+        {"★".repeat(Math.floor(rounded))}
+        {rounded % 1 >= 0.5 ? "½" : ""}
+        <span style={{ color: "var(--rule-2)" }}>{"★".repeat(5 - Math.ceil(rounded))}</span>
+      </span>
+      <span style={{ fontVariantNumeric: "tabular-nums", fontWeight: 750 }}>{rating.toFixed(1)}</span>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------- money
+
+/**
+ * An amount of money, formatted the same way everywhere.
+ *
+ * Five screens had each written their own `(cents / 100).toFixed(2)`, and sub-cent amounts came out
+ * as "$0.00" — which is not a small rounding annoyance in a product whose whole discipline is
+ * knowing what has been spent. A third of a cent is not free, and saying it is free is how a
+ * hundred and sixty Instagram lookups once got recorded as costing nothing.
+ */
+export function Money({ cents, free = "free" }: { cents: number; free?: string }) {
+  if (cents === 0) return <>{free}</>;
+  // Below a cent, dollars cannot say it. Cents can.
+  if (cents < 1) return <>{cents < 0.01 ? "<0.01¢" : `${cents.toFixed(2)}¢`}</>;
+  return <>${(cents / 100).toFixed(2)}</>;
+}
+
+/**
+ * A price with the two things a price is useless without: **who bills it** and **what it buys**.
+ *
+ * The operator's report was that prices were confusing — *"pata hi nhi chalta ke price kis cheez
+ * ki display ker raha hai"* — and separately, as a standing instruction, that every cost must name
+ * the service behind it and say what that service does. A bare "$0.07" satisfies neither. This
+ * component makes the unnamed version impossible to write by accident.
+ */
+export function Price({
+  cents,
+  what,
+  platform,
+  per,
+  free = false,
+  size = "normal",
+}: {
+  cents: number;
+  /** What the money buys, in the operator's words: "their Google rating and review count". */
+  what: string;
+  /** Who bills it: "Google Places API", "Apify", "Google AI Studio (Gemini)". */
+  platform: string;
+  /** The unit, when there is one: "per business", "per page". */
+  per?: string;
+  /** True when this costs nothing at all — said plainly rather than shown as $0.00. */
+  free?: boolean;
+  size?: "normal" | "large";
+}) {
+  const big = size === "large";
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", gap: 1, verticalAlign: "top" }}>
+      <span
+        style={{
+          fontSize: big ? 22 : 16,
+          fontWeight: 750,
+          color: free ? "var(--good-ink)" : "var(--money-ink)",
+          fontVariantNumeric: "tabular-nums",
+          lineHeight: 1.15,
+        }}
+      >
+        {free ? "Free" : <Money cents={cents} />}
+        {per && !free ? <span style={{ fontSize: big ? 15 : 14, fontWeight: 550 }}> {per}</span> : null}
+      </span>
+      <span style={{ fontSize: 14.5, color: "var(--ink-2)", lineHeight: 1.4 }}>
+        for {what}
+      </span>
+      <span style={{ fontSize: 14, color: "var(--ink-2)", lineHeight: 1.4 }}>
+        {free ? "Costs nothing — " : "Billed by "}
+        <strong style={{ color: "var(--ink)" }}>{platform}</strong>
+      </span>
     </span>
   );
 }
@@ -668,14 +889,22 @@ export function Badge({ children, tone = "plain" }: { children: React.ReactNode;
  */
 export function FilterSection({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
-    <div style={{ padding: "13px 15px", borderBottom: "1px solid var(--rule)" }}>
-      <div style={{ fontSize: 13, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--ink-3)", fontWeight: 700 }}>
+    <div style={{ padding: "15px 16px", borderBottom: "1px solid var(--rule-2)" }}>
+      <div
+        style={{
+          fontSize: 14,
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+          color: "var(--ink)",
+          fontWeight: 800,
+        }}
+      >
         {title}
       </div>
       {hint ? (
-        <div style={{ fontSize: 13, color: "var(--ink-3)", margin: "3px 0 8px", lineHeight: 1.4 }}>{hint}</div>
+        <div style={{ fontSize: 14.5, color: "var(--ink-2)", margin: "4px 0 9px", lineHeight: 1.45 }}>{hint}</div>
       ) : (
-        <div style={{ height: 7 }} />
+        <div style={{ height: 8 }} />
       )}
       {children}
     </div>
@@ -705,23 +934,24 @@ export function FilterOption({
         display: "flex",
         alignItems: "baseline",
         gap: 8,
-        padding: "6px 8px",
-        margin: "1px -8px",
+        padding: "8px 9px",
+        margin: "2px -9px",
         borderRadius: 7,
         textDecoration: "none",
         background: active ? "var(--brand)" : "transparent",
-        color: active ? "#fff" : "var(--ink-2)",
+        color: active ? "#fff" : "var(--ink)",
       }}
     >
-      <span style={{ flex: 1, fontSize: 13.4, fontWeight: active ? 650 : 400, lineHeight: 1.35 }}>
+      <span style={{ flex: 1, fontSize: 15.5, fontWeight: active ? 700 : 550, lineHeight: 1.4 }}>
         {label}
         {explain ? (
           <span
             style={{
               display: "block",
-              fontSize: 13,
-              color: active ? "rgba(255,255,255,0.86)" : "var(--ink-3)",
+              fontSize: 14,
+              color: active ? "rgba(255,255,255,0.94)" : "var(--ink-2)",
               fontWeight: 400,
+              marginTop: 1,
             }}
           >
             {explain}
@@ -731,10 +961,10 @@ export function FilterOption({
       {count !== undefined ? (
         <span
           style={{
-            fontSize: 13,
+            fontSize: 15,
             fontVariantNumeric: "tabular-nums",
-            color: active ? "#fff" : accent ? "var(--brand)" : "var(--ink-3)",
-            fontWeight: accent && !active ? 700 : 400,
+            color: active ? "#fff" : accent ? "var(--brand)" : "var(--ink)",
+            fontWeight: 700,
           }}
         >
           {count}
@@ -746,21 +976,45 @@ export function FilterOption({
 
 // ---------------------------------------------------------------- table bits
 
+/**
+ * A column heading, aligned by the component rather than by whichever table it lands in.
+ *
+ * `<th>` centres its contents by default, and only two of the ten tables in this product carry the
+ * `.tbl` class that overrode it — so eight of them had headings floating in the middle of the
+ * column while every cell beneath was hard left. The operator's report was that it looked wrong,
+ * and it did: a two-line heading centred over left-aligned data reads as two unrelated fragments
+ * rather than one label.
+ *
+ * Fixing it here rather than in the stylesheet means a new table cannot get it wrong by forgetting
+ * a class name.
+ */
 export function Th({ label, explain, width }: { label: string; explain?: string; width?: number }) {
   return (
-    <th style={width ? { width } : undefined}>
-      <div style={{ fontSize: 13, letterSpacing: "0.045em", textTransform: "uppercase", color: "var(--ink-2)", fontWeight: 700 }}>
+    <th
+      style={{
+        textAlign: "left",
+        verticalAlign: "bottom",
+        padding: "10px 14px",
+        background: "var(--surface-2)",
+        borderBottom: "1px solid var(--rule)",
+        ...(width ? { width } : {}),
+      }}
+    >
+      <div style={{ fontSize: 14, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--ink)", fontWeight: 800, lineHeight: 1.25 }}>
         {label}
       </div>
       {explain ? (
         <div
           style={{
-            fontSize: 13,
-            color: "var(--ink-3)",
-            fontWeight: 400,
+            fontSize: 14,
+            color: "var(--ink-2)",
+            fontWeight: 500,
             textTransform: "none",
             letterSpacing: 0,
-            lineHeight: 1.32,
+            lineHeight: 1.35,
+            marginTop: 2,
+            // Otherwise a long explanation stretches its column far wider than the data below it.
+            maxWidth: 240,
           }}
         >
           {explain}
@@ -771,16 +1025,17 @@ export function Th({ label, explain, width }: { label: string; explain?: string;
 }
 
 export const TD: React.CSSProperties = {
-  padding: "12px 14px",
+  padding: "13px 14px",
   borderBottom: "1px solid var(--rule)",
-  fontSize: 14,
+  fontSize: 15.5,
+  color: "var(--ink)",
   verticalAlign: "top",
 };
 
 /** The priority badge, with its meaning spelled out beside it rather than hidden in a tooltip. */
 export function TierBadge({ tier, showText = false }: { tier: number | null; showText?: boolean }) {
   if (tier === null) {
-    return <span style={{ color: "var(--ink-3)", fontSize: 13 }}>{showText ? "Not scored" : "—"}</span>;
+    return <span style={{ color: "var(--ink-3)", fontSize: 14.5 }}>{showText ? "Not scored" : "—"}</span>;
   }
   const tone: Tone = tier === 1 ? "bad" : tier === 2 ? "warn" : tier === 3 ? "info" : "plain";
   const c = toneVars(tone);
@@ -794,14 +1049,14 @@ export function TierBadge({ tier, showText = false }: { tier: number | null; sho
           padding: "3px 8px",
           borderRadius: 7,
           fontWeight: 750,
-          fontSize: 13,
+          fontSize: 14.5,
           color: tone === "plain" ? "var(--ink-2)" : "#fff",
           background: tone === "plain" ? "var(--surface-3)" : c.fg,
         }}
       >
         {tier}
       </span>
-      {showText ? <span style={{ fontSize: 13, color: "var(--ink-3)" }}>{TIER_MEANING[tier]}</span> : null}
+      {showText ? <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>{TIER_MEANING[tier]}</span> : null}
     </span>
   );
 }
@@ -858,7 +1113,7 @@ export const WEBSITE_LABELS: Record<string, string> = {
 export function AppHeader({ back }: { current?: NavKey; email?: string | null; signOutAction?: unknown; back?: { href: string; label: string } }) {
   return back ? (
     <header className="topbar">
-      <Link href={back.href} style={{ fontSize: 14.5, fontWeight: 600 }}>
+      <Link href={back.href} style={{ fontSize: 16, fontWeight: 600 }}>
         ← {back.label}
       </Link>
     </header>

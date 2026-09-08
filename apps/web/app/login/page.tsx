@@ -13,7 +13,7 @@ export default function LoginPage() {
           padding: "36px 32px",
         }}
       >
-        <h1 style={{ fontSize: 30, margin: "0 0 6px" }}>Lead Intel</h1>
+        <h1 style={{ fontSize: 34, margin: "0 0 6px" }}>Lead Intel</h1>
         <p style={{ margin: "0 0 28px", color: "var(--ink-3)" }}>
           AheadTech360 internal. Accounts are created by an admin.
         </p>

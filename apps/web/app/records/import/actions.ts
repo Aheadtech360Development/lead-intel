@@ -243,6 +243,13 @@ export async function confirmImport(formData: FormData): Promise<void> {
   const flagForReview = new Set(preview.possibleDuplicates.map((d) => d.row.rowNumber));
 
   let created = 0;
+  // Partial failures, counted separately from a row that could not be imported at all. A business
+  // created without its identity keys is invisible to the deduplicator and will be created again by
+  // the next overlapping file; one created without its fields has no website or phone. Both used to
+  // happen silently, and would have surfaced weeks later as duplicates and blanks nobody could
+  // account for.
+  let keysFailed = 0;
+  let fieldsFailed = 0;
   let merged = 0;
   let failed = 0;
   /**
@@ -318,7 +325,15 @@ export async function confirmImport(formData: FormData): Promise<void> {
     }
 
     if (keys.length > 0) {
-      await supabase.from("identity_keys").insert(
+      /**
+       * Counted, because losing these quietly is expensive later.
+       *
+       * Identity keys are the whole basis of deduplication - place id, domain, phone, name and
+       * location. A business created without them is invisible to the matcher, so the next import
+       * of an overlapping list creates it a second time. The failure would show up weeks later as
+       * duplicates nobody could explain, so it is worth a line in the summary now.
+       */
+      const { error: keyError } = await supabase.from("identity_keys").insert(
         keys.map((k) => ({
           business_id: business.id,
           key_type: k.keyType,
@@ -326,9 +341,10 @@ export async function confirmImport(formData: FormData): Promise<void> {
           rank: k.rank,
         })),
       );
+      if (keyError) keysFailed += 1;
     }
 
-    await writeFields(supabase, business.id, row);
+    if (!(await writeFields(supabase, business.id, row))) fieldsFailed += 1;
     touched.push(business.id);
     created += 1;
   }
@@ -373,6 +389,12 @@ export async function confirmImport(formData: FormData): Promise<void> {
       ? ` ${preview.possibleDuplicates.length} are flagged as possible duplicates for you to check.`
       : "") +
     (failed > 0 ? ` ${failed} failed.` : "") +
+    (keysFailed > 0
+      ? ` ${keysFailed} could not have their matching keys saved, so a future import of the same business may create it twice — worth telling whoever maintains this.`
+      : "") +
+    (fieldsFailed > 0
+      ? ` ${fieldsFailed} were created but their website or phone could not be saved.`
+      : "") +
     (plan.analyseWebsites && analysisStarted
       ? " Their websites are being read and scored now — it costs nothing. Refresh in a few minutes."
       : plan.analyseWebsites
@@ -425,11 +447,12 @@ async function findSameNameInTown(
 }
 
 /** Every field carries `csv_import` as its source, so provenance survives the import. */
+/** True when every field was stored. False means at least one was silently lost before. */
 async function writeFields(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
   row: ImportRow,
-): Promise<void> {
+): Promise<boolean> {
   const fields = [
     row.domain ? { field_name: "website_url", value: row.domain } : null,
     row.phone ? { field_name: "phone", value: row.phone } : null,
@@ -437,10 +460,11 @@ async function writeFields(
     row.address ? { field_name: "address", value: row.address } : null,
   ].filter((f): f is { field_name: string; value: string } => f !== null);
 
-  if (fields.length === 0) return;
+  if (fields.length === 0) return true;
 
+  let ok = true;
   for (const field of fields) {
-    await supabase.from("field_metadata").upsert(
+    const { error } = await supabase.from("field_metadata").upsert(
       {
         business_id: businessId,
         field_name: field.field_name,
@@ -455,5 +479,8 @@ async function writeFields(
       },
       { onConflict: "business_id,field_name" },
     );
+    if (error) ok = false;
   }
+
+  return ok;
 }

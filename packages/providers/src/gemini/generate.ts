@@ -110,7 +110,7 @@ export async function callGemini(request: GeminiRequest): Promise<GeminiResult> 
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      return { ok: false, reason: httpFailure(response.status), detail: `HTTP ${response.status}. ${body.slice(0, 300)}` };
+      return { ok: false, reason: httpFailure(response.status, body), detail: `HTTP ${response.status}. ${body.slice(0, 300)}` };
     }
 
     const payload = (await response.json()) as GeminiResponse;
@@ -194,9 +194,22 @@ export function parseJsonAnswer<T>(result: GeminiResult): { ok: true; value: T }
   }
 }
 
-function httpFailure(status: number): GeminiFailure {
+/**
+ * A 429 is two different problems wearing the same number.
+ *
+ * **Per minute** clears itself in seconds and is worth waiting for. **Per day** does not clear
+ * until tomorrow, and continuing to ask means every remaining page fails identically — on a
+ * three-hundred-site run that is a couple of thousand pointless requests, and a good way to have an
+ * account limited for the trouble.
+ *
+ * Google names which one it is in the body, in a `quotaId` such as
+ * `GenerateRequestsPerDayPerProjectPerModel`. Matching on "PerDay" is narrow on purpose: anything
+ * unrecognised is treated as the recoverable kind, because retrying a few times costs seconds while
+ * wrongly giving up costs the whole pass.
+ */
+function httpFailure(status: number, body = ""): GeminiFailure {
   if (status === 401 || status === 403) return "auth_failed";
-  if (status === 429) return "rate_limited";
+  if (status === 429) return /PerDay|per day|daily limit/i.test(body) ? "quota_exhausted" : "rate_limited";
   return "http_error";
 }
 

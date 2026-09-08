@@ -79,6 +79,63 @@ export async function auditEveryWebsite(formData: FormData): Promise<void> {
 }
 
 /**
+ * Reads only the businesses the operator ticked.
+ *
+ * A separate action from `auditEveryWebsite` rather than the same one with an empty list, because
+ * in that action an empty list *means* "everything" — so a mis-click on "read ticked" with nothing
+ * ticked would quietly start a three-hundred-site pass. Here an empty list is an error, and says so.
+ *
+ * The ids arrive from the table's own checkboxes: the button sits inside that form and overrides
+ * where it submits, so the ticks the operator can see are exactly the ids this receives.
+ */
+export async function auditTickedWebsites(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (typeof claimsData?.claims?.sub !== "string") {
+    redirect(`/records?error=${encodeURIComponent("You are not signed in.")}`);
+  }
+
+  const businessIds = formData.getAll("id").map(String).filter(Boolean);
+  if (businessIds.length === 0) {
+    redirect(
+      `/records?error=${encodeURIComponent(
+        "Nothing was ticked, so nothing ran. Tick the businesses you want read, then press this again — " +
+          "or use “Read them page by page” at the top to do the whole list.",
+      )}`,
+    );
+  }
+
+  const jobRunId = await startJobRun(supabase, {
+    kind: "audit-site-run",
+    label: `Reading ${businessIds.length} ticked ${businessIds.length === 1 ? "website" : "websites"} page by page`,
+    total: businessIds.length,
+  });
+
+  const blocked = enqueueBlockedBecause();
+  if (blocked.blocked) {
+    await failJobRun(supabase, jobRunId, blocked.why);
+    redirect(`/records?error=${encodeURIComponent(blocked.why)}`);
+  }
+
+  try {
+    // Explicit ids, so these are re-read even if they have been audited before — which is the point
+    // of ticking them. The whole-list button is the one that skips what it has already done.
+    await tasks.trigger<typeof auditSiteRunTask>("audit-site-run", { businessIds, jobRunId });
+  } catch (err) {
+    await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
+    redirect(`/records?error=${encodeURIComponent(explainEnqueueFailure(err))}`);
+  }
+
+  redirect(
+    `/records?saved=${encodeURIComponent(
+      `Reading ${businessIds.length} ${businessIds.length === 1 ? "website" : "websites"} page by page. ` +
+        `The bar at the top shows how far along it is. Open any of them to see the pages, the screenshots ` +
+        `and what the model made of them.`,
+    )}`,
+  );
+}
+
+/**
  * Re-scores every business from the findings already stored.
  *
  * No crawl, no browser, no provider — pure arithmetic over what is already in the database, which
@@ -124,4 +181,44 @@ export async function rescoreEverything(): Promise<void> {
       "Re-scoring everything from the checks already stored. This costs nothing — no website is read again.",
     )}`,
   );
+}
+
+/**
+ * The two "get paid data" buttons, as server actions.
+ *
+ * They used to be plain submits on a `method="get"` form pointing straight at /records/enrich. That
+ * worked, and the Claim buttons in the rows of that same form were already server actions reached
+ * by `formAction`, so mixing the two was demonstrably fine.
+ *
+ * Making all three the same kind of thing is a tidiness choice rather than a fix: one form, one
+ * mechanism, and no need for the next person to work out why two buttons in one bar submit by
+ * different routes. Nothing the operator sees changes — these still only *navigate* to the confirm
+ * screen, and still buy nothing.
+ */
+async function toEnrich(formData: FormData, scope: "ticked" | "filtered"): Promise<never> {
+  const params = new URLSearchParams();
+
+  // Every f_* filter the table carried, forwarded untouched. The confirm screen re-derives the set
+  // from these through the same predicate the list used — see lib/lead-filters.ts.
+  for (const [key, value] of formData.entries()) {
+    if (key.startsWith("f_") && typeof value === "string" && value) params.append(key, value);
+  }
+
+  if (scope === "filtered") {
+    params.set("scope", "filtered");
+  } else {
+    for (const id of formData.getAll("id")) {
+      if (typeof id === "string" && id) params.append("id", id);
+    }
+  }
+
+  redirect(`/records/enrich?${params.toString()}`);
+}
+
+export async function getPaidDataForTicked(formData: FormData): Promise<void> {
+  await toEnrich(formData, "ticked");
+}
+
+export async function getPaidDataForFiltered(formData: FormData): Promise<void> {
+  await toEnrich(formData, "filtered");
 }

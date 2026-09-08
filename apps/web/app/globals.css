@@ -86,6 +86,21 @@
   --accent: var(--brand);
   --accent-bg: var(--brand-bg);
 
+  /*
+   * ---- Row tints ----
+   *
+   * Deliberately almost invisible. The operator's instruction was "esa color kerna ke na ke baraber
+   * ho, bus esa ho ke hume samajh ajaye" — enough to group rows when scanning a long list, never
+   * enough to compete with the text on top of them or to make a row look like a warning.
+   *
+   * They mark an absence, so none of them uses a semantic hue at full strength: --bad on a row
+   * would read as "something went wrong with this business", and the opposite is true — a business
+   * with reviews and nothing else is the best call on the page.
+   */
+  --row-gray: #f2f4f7;
+  --row-peach: #fdf5ee;
+  --row-red: #fdf1f2;
+
   --shadow-sm: 0 1px 2px rgba(19, 26, 42, 0.05);
   --shadow: 0 1px 3px rgba(19, 26, 42, 0.07), 0 6px 16px -8px rgba(19, 26, 42, 0.12);
   --radius: 10px;
@@ -208,16 +223,94 @@ textarea {
    run out of room for them — but the real reason is orientation: a rail is always visible, always
    in the same order, and shows where you are without being read. */
 
+/*
+ * The rail has two widths, and the change between them is animated.
+ *
+ * Closed is the default and shows icons only — 60px instead of 232px, which is most of a lead
+ * column handed back to the table. Nothing becomes unreachable: every link keeps its icon and gains
+ * a tooltip carrying the name, so the narrow rail is a shorthand rather than a hiding place.
+ *
+ * The width lives on the grid rather than on the nav so the main column moves with it in one
+ * animation instead of two that can disagree.
+ */
 .shell {
   display: grid;
-  grid-template-columns: 232px minmax(0, 1fr);
+  grid-template-columns: var(--rail-w, 232px) minmax(0, 1fr);
   min-height: 100vh;
+  transition: grid-template-columns 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.shell[data-rail="closed"] {
+  --rail-w: 60px;
+}
+
+/* Words fade and slide out of the way; icons stay put. Animating opacity and transform rather than
+   display, because display cannot be transitioned and a label that vanishes on the first frame
+   makes the whole movement look like a jump. */
+.rail-word {
+  transition:
+    opacity 0.16s ease,
+    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.shell[data-rail="closed"] .rail-word {
+  opacity: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
+}
+
+/* Groups are headings for words that are no longer there. */
+.shell[data-rail="closed"] .rail-group {
+  opacity: 0;
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.rail-top {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rail-toggle {
+  border: 1px solid var(--rule-2);
+  background: var(--surface);
+  color: var(--ink-2);
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  padding: 5px 8px;
+  transition: background 0.12s ease;
+}
+
+.rail-toggle:hover {
+  background: var(--surface-3);
+  color: var(--ink);
+}
+
+.shell[data-rail="closed"] .rail-top {
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Nothing should animate for someone who has asked the operating system not to. */
+@media (prefers-reduced-motion: reduce) {
+  .shell,
+  .rail-word,
+  .rail-group {
+    transition: none;
+  }
 }
 
 .rail {
   background: var(--surface);
   border-right: 1px solid var(--rule);
-  padding: 16px 12px;
+  padding: 16px 12px 16px;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -231,7 +324,9 @@ textarea {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 6px 10px 16px;
+  padding: 6px 4px 6px 10px;
+  flex: 1;
+  min-width: 0;
   font-weight: 800;
   font-size: 18px;
   color: var(--ink);

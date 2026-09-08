@@ -12,8 +12,11 @@
  *    tone below has exactly one meaning and is used for nothing else.
  */
 
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { loadRunningJobs } from "@/lib/job-runs";
+import { RAIL_COOKIE, railIsOpen } from "@/lib/rail";
+import { toggleRail } from "./actions";
 import { RunningJobs } from "./running-jobs";
 
 export type Tone = "brand" | "good" | "warn" | "bad" | "info" | "money" | "social" | "plain";
@@ -180,13 +183,35 @@ export async function AppShell({
    */
   const runningJobs = await loadRunningJobs();
 
+  /**
+   * Narrow unless asked otherwise.
+   *
+   * Closed is the default because that is what was asked for. Closed still shows every icon, so
+   * nothing becomes unreachable — it stops being a 232px column of words and becomes a 60px strip
+   * of symbols, which is enough once the operator knows the seven places by their shape.
+   */
+  const railOpen = railIsOpen((await cookies()).get(RAIL_COOKIE)?.value);
+
   return (
-    <div className="shell">
+    <div className="shell" data-rail={railOpen ? "open" : "closed"}>
       <nav className="rail">
-        <Link href="/dashboard" className="rail-brand">
-          <span aria-hidden style={{ fontSize: 20.5 }}>◈</span>
-          Lead Intel
-        </Link>
+        <div className="rail-top">
+          <Link href="/dashboard" className="rail-brand" title="Lead Intel — dashboard">
+            <span aria-hidden style={{ fontSize: 20.5 }}>◈</span>
+            <span className="rail-word">Lead Intel</span>
+          </Link>
+          {/* A form, not a script. See toggleRail in app/actions.ts for why the state is a cookie. */}
+          <form action={toggleRail}>
+            <button
+              type="submit"
+              className="rail-toggle"
+              title={railOpen ? "Make the sidebar narrow" : "Open the sidebar"}
+              aria-label={railOpen ? "Make the sidebar narrow" : "Open the sidebar"}
+            >
+              {railOpen ? "«" : "»"}
+            </button>
+          </form>
+        </div>
 
         {groups.map((group) => (
           <div key={group}>
@@ -197,12 +222,12 @@ export async function AppShell({
                 href={item.href}
                 className="rail-link"
                 data-active={current === item.key}
-                title={item.what}
+                title={`${item.label} — ${item.what}`}
               >
                 <span className="rail-icon" aria-hidden>
                   {item.icon}
                 </span>
-                {item.label}
+                <span className="rail-word">{item.label}</span>
               </Link>
             ))}
           </div>
@@ -210,17 +235,25 @@ export async function AppShell({
 
         <div style={{ marginTop: "auto", paddingTop: 18 }}>
           {email ? (
-            <div style={{ fontSize: 14.5, color: "var(--ink-3)", padding: "0 10px 8px", wordBreak: "break-all" }}>
+            <div
+              className="rail-word"
+              style={{ fontSize: 14.5, color: "var(--ink-3)", padding: "0 10px 8px", wordBreak: "break-all" }}
+            >
               {email}
             </div>
           ) : null}
           {signOutAction ? (
             <form action={signOutAction}>
-              <button className="btn btn-quiet" type="submit" style={{ width: "100%", justifyContent: "flex-start" }}>
+              <button
+                className="btn btn-quiet"
+                type="submit"
+                title="Sign out"
+                style={{ width: "100%", justifyContent: "flex-start" }}
+              >
                 <span className="rail-icon" aria-hidden>
                   ⏻
                 </span>
-                Sign out
+                <span className="rail-word">Sign out</span>
               </button>
             </form>
           ) : null}
@@ -988,12 +1021,22 @@ export function FilterOption({
  * Fixing it here rather than in the stylesheet means a new table cannot get it wrong by forgetting
  * a class name.
  */
-export function Th({ label, explain, width }: { label: string; explain?: string; width?: number }) {
+/** `width` takes a percentage string as well as a pixel count — see the note on the leads table. */
+export function Th({ label, explain, width }: { label: string; explain?: string; width?: number | string }) {
   return (
     <th
       style={{
         textAlign: "left",
-        verticalAlign: "bottom",
+        /**
+         * Top, not bottom.
+         *
+         * Bottom-aligning made every heading hang off an invisible baseline set by whichever
+         * column had the longest explanation — so "tick", "NO." and "BUSINESS" sat low in the row
+         * while "SCORES" started high, and the header read as scattered rather than as a row.
+         * Starting them all from the top lines the labels up with each other, which is the thing
+         * the eye actually follows.
+         */
+        verticalAlign: "top",
         padding: "10px 14px",
         background: "var(--surface-2)",
         borderBottom: "1px solid var(--rule)",

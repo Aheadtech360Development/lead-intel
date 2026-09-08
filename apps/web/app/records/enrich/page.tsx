@@ -8,6 +8,7 @@ import {
 } from "@lead-intel/shared";
 import Link from "next/link";
 import { instagramCandidateIds } from "@/lib/instagram-candidates";
+import { selectFilteredIds } from "@/lib/lead-filters";
 import { createClient } from "@/lib/supabase/server";
 import { AppShell, Banner, Money, Note, PANEL, Panel } from "../../ui";
 import { buyEnrichment } from "./actions";
@@ -42,6 +43,21 @@ interface Params {
   f_from?: string;
   /** One imported file. Set when an import's plan asked for Instagram and carried the batch here. */
   f_batch?: string;
+  /**
+   * The rest of them.
+   *
+   * These were sent by the list and simply not declared here, which is exactly how the bug the
+   * comment above describes happened a second time — this screen cannot apply a filter it does not
+   * admit exists. They are no longer read one by one anyway: `selectFilteredIds` takes the lot and
+   * applies the same predicate the list used to count the button.
+   */
+  f_category?: string;
+  f_subcategory?: string;
+  f_rule?: string;
+  f_ads?: string;
+  f_minFollowers?: string;
+  f_q?: string;
+  f_claimed?: string;
   /** Narrows the offered sources to one, so an import's "then get Instagram" arrives on point. */
   only?: string;
   /** With `scope=instagram`: include accounts already looked up rather than only the missing ones. */
@@ -64,6 +80,8 @@ const HAND_PICKED_ONLY: EnrichmentSource[] = ["meta_ads"];
 export default async function EnrichPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const supabase = await createClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const claims = claimsData?.claims;
 
   // Two ways to arrive: specific rows ticked, or "everything matching the filter I was looking
   // at". The second re-runs the same query rather than trusting a count from the previous page.
@@ -81,18 +99,35 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
     });
   } else if (params.scope === "filtered") {
     arrivedBy = "filter";
-    let query = supabase.from("businesses").select("id").eq("status", "active");
-    // Only the "worth calling" view narrows to the gate. `everything` and `unanalysed` both show
-    // businesses that have not passed it, and applying the gate to those would quietly select a
-    // different set than the one on screen.
-    if (params.f_view === undefined) query = query.eq("passed_gate", true);
-    if (params.f_tier) query = query.eq("tier", Number(params.f_tier));
-    if (params.f_route) query = query.eq("route", params.f_route);
-    if (params.f_website) query = query.eq("website_status", params.f_website);
-    if (params.f_from) query = query.eq("origin", params.f_from);
-    if (params.f_batch) query = query.eq("import_batch_id", params.f_batch);
-    const { data } = await query;
-    businessIds = (data ?? []).map((b) => b.id);
+    /**
+     * The same predicate the list used to count the button, not a second query resembling it.
+     *
+     * This used to rebuild the set from six of the eleven filters. Category, the rule that assigned
+     * it, whether they advertise, the follower floor, the search box and the claim filter were all
+     * dropped — so "Get paid data for all 47" could hand the purchase a set larger than the 47 the
+     * operator had just counted on screen, and the difference was money.
+     *
+     * See lib/lead-filters.ts: one function, called from both places, so they cannot disagree.
+     */
+    businessIds = await selectFilteredIds(
+      supabase,
+      {
+        view: params.f_view,
+        tier: params.f_tier,
+        route: params.f_route,
+        website: params.f_website,
+        from: params.f_from,
+        batch: params.f_batch,
+        category: params.f_category,
+        subcategory: params.f_subcategory,
+        rule: params.f_rule,
+        ads: params.f_ads,
+        minFollowers: params.f_minFollowers,
+        q: params.f_q,
+        claimed: params.f_claimed,
+      },
+      typeof claims?.sub === "string" ? claims.sub : null,
+    );
   } else {
     businessIds = typeof params.id === "string" ? [params.id] : (params.id ?? []);
   }

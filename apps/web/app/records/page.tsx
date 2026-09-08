@@ -1,5 +1,6 @@
 import { BUSINESS_ORIGIN_LABELS, BUSINESS_ORIGINS, type BusinessOrigin } from "@lead-intel/shared";
 import Link from "next/link";
+import { leadGap, loadSocialFacts, matchesFilters, type LeadRow } from "@/lib/lead-filters";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import {
@@ -20,7 +21,13 @@ import {
 } from "../ui";
 import { claimBusiness, releaseClaim } from "./actions";
 import { analyseUnscored } from "./analyse-actions";
-import { auditEveryWebsite, rescoreEverything } from "./audit-actions";
+import {
+  auditEveryWebsite,
+  auditTickedWebsites,
+  getPaidDataForFiltered,
+  getPaidDataForTicked,
+  rescoreEverything,
+} from "./audit-actions";
 
 /**
  * The whole-list jobs, as data.
@@ -30,6 +37,24 @@ import { auditEveryWebsite, rescoreEverything } from "./audit-actions";
  * platform does. Making the price part of the definition means an unnamed one cannot be written by
  * accident.
  */
+/**
+ * The three row tints, and what each one means.
+ *
+ * Kept beside the legend that explains them, so a colour cannot be added without a line telling the
+ * operator what it says. A tint nobody can decode is decoration.
+ */
+const ROW_TINT: Record<"no-website" | "no-instagram" | "nothing-but-demand", string> = {
+  "no-website": "var(--row-gray)",
+  "no-instagram": "var(--row-peach)",
+  "nothing-but-demand": "var(--row-red)",
+};
+
+const ROW_TINT_MEANING: { tint: string; says: string }[] = [
+  { tint: "var(--row-red)", says: "Reviews on Google, but no website and no Instagram — the strongest call on the list" },
+  { tint: "var(--row-gray)", says: "Has Instagram, no working website — an audience with nowhere to send it" },
+  { tint: "var(--row-peach)", says: "Website works, no Instagram found" },
+];
+
 const WHOLE_LIST_JOBS: {
   title: string;
   what: string;
@@ -159,8 +184,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     .order("tier", { ascending: true, nullsFirst: false })
     .order("problem_score", { ascending: false, nullsFirst: false });
 
-  const [{ data: contactRows }, { data: spendRows }, { data: batchRows }, { data: socialRows }] =
-    await Promise.all([
+  const [{ data: contactRows }, { data: spendRows }, { data: batchRows }, social] = await Promise.all([
     supabase
       .from("field_metadata")
       .select("business_id, field_name")
@@ -171,29 +195,12 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
       .limit(20000),
     supabase.from("provider_calls").select("cost_cents").limit(20000),
     supabase.from("import_batches").select("id, filename").eq("status", "imported"),
-    // Instagram and ads, for the columns and the two filters below. One row per business per
-    // field, so this is bounded by the list size rather than by anything unbounded.
-    supabase
-      .from("field_metadata")
-      .select("business_id, field_name, value")
-      .in("field_name", ["instagram_followers", "instagram_handle", "meta_ads_running"])
-      .limit(20000),
+    // Instagram, ads and review counts — the columns, two of the filters, and the row tinting. The
+    // same loader the buy screen uses, so neither can be looking at a different set of facts.
+    loadSocialFacts(supabase),
   ]);
 
   const batchNames = new Map((batchRows ?? []).map((b) => [b.id, b.filename ?? "an uploaded file"]));
-  const social = new Map<string, { followers: number | null; handle: string | null; adsRunning: boolean | null }>();
-  for (const row of socialRows ?? []) {
-    const at = social.get(row.business_id) ?? { followers: null, handle: null, adsRunning: null };
-    if (row.field_name === "instagram_followers") {
-      const n = Number(row.value);
-      // Left unknown rather than coerced to 0 — a private account has no published count, and a
-      // "5,000+ followers" filter must not sweep it in as though it had none.
-      at.followers = Number.isFinite(n) ? n : null;
-    }
-    if (row.field_name === "instagram_handle") at.handle = row.value;
-    if (row.field_name === "meta_ads_running") at.adsRunning = row.value === "true";
-    social.set(row.business_id, at);
-  }
 
   const contactable = new Map<string, { email: boolean; phone: boolean }>();
   for (const row of contactRows ?? []) {
@@ -223,75 +230,36 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
    */
   const neverAnalysed = rows.filter((b) => b.scored_at === null);
 
-  /** Free-text search over the things an operator would actually type. */
-  const needle = (current.q ?? "").toLowerCase();
-  const matchesSearch = (b: (typeof rows)[number]) =>
-    needle.length === 0 ||
-    [b.display_name, b.city, b.state, b.category, b.subcategory]
-      .some((field) => typeof field === "string" && field.toLowerCase().includes(needle));
-
-  const matchesClaim = (b: (typeof rows)[number]) =>
-    current.claimed === "me"
-      ? b.claimed_by === claims?.sub
-      : current.claimed === "anyone"
-        ? b.claim_status === "claimed"
-        : current.claimed === "nobody"
-          ? b.claim_status !== "claimed"
-          : true;
-
-  const inView = (b: (typeof rows)[number]) =>
-    matchesSearch(b) &&
-    matchesClaim(b) &&
-    (view === "ready" ? Boolean(b.passed_gate) : view === "unanalysed" ? b.scored_at === null : true);
-
-  const shown = rows.filter((b) => {
-    if (!inView(b)) return false;
-    if (current.tier && String(b.tier) !== current.tier) return false;
-    if (current.route && b.route !== current.route) return false;
-    if (current.website && b.website_status !== current.website) return false;
-    if (current.from && b.origin !== current.from) return false;
-    if (current.batch && b.import_batch_id !== current.batch) return false;
-    if (current.category && b.category !== current.category) return false;
-    if (current.subcategory && b.subcategory !== current.subcategory) return false;
-    if (current.rule && b.category_rule_id !== current.rule) return false;
-    if (current.ads) {
-      const running = social.get(b.id)?.adsRunning ?? null;
-      // Unknown is neither yes nor no. A business whose ads were never checked must not appear
-      // under "not advertising", which would be a claim nobody made.
-      if (running === null || running !== (current.ads === "yes")) return false;
-    }
-    if (current.minFollowers) {
-      const followers = social.get(b.id)?.followers ?? null;
-      if (followers === null || followers < Number(current.minFollowers)) return false;
-    }
-    return true;
-  });
+  const shown = rows.filter((b) =>
+    matchesFilters(b as unknown as LeadRow, { ...current, view }, { social, userId: claims?.sub ?? null }),
+  );
 
   // Every count in the sidebar is "how many would I see if I clicked this", measured against the
   // filters already on — not a global total. A count that ignores the current selection sends the
   // operator to an empty list, which is the specific way faceted filters usually lie.
-  const withinView = rows.filter(inView);
-  const countIf = (extra: Partial<Filters>) =>
-    withinView.filter((b) => {
-      const f = { ...current, ...extra };
-      if (f.tier && f.tier !== "all" && String(b.tier) !== f.tier) return false;
-      if (f.route && f.route !== "all" && b.route !== f.route) return false;
-      if (f.website && f.website !== "all" && b.website_status !== f.website) return false;
-      if (f.from && f.from !== "all" && b.origin !== f.from) return false;
-      if (f.batch && b.import_batch_id !== f.batch) return false;
-      if (f.category && b.category !== f.category) return false;
-      if (f.subcategory && b.subcategory !== f.subcategory) return false;
-      if (f.rule && b.category_rule_id !== f.rule) return false;
-      if (f.ads) {
-        const running = social.get(b.id)?.adsRunning ?? null;
-        if (running === null || running !== (f.ads === "yes")) return false;
-      }
-      if (f.minFollowers) {
-        const followers = social.get(b.id)?.followers ?? null;
-        if (followers === null || followers < Number(f.minFollowers)) return false;
-      }
-      return true;
-    }).length;
+  const ctx = { social, userId: claims?.sub ?? null };
+
+  /**
+   * The sidebar counts, from the same predicate as the rows and the buy screen.
+   *
+   * This was a third copy of the filter rules — the list had one, the counts had another, and the
+   * buy screen had a third that had already drifted twice. Three copies of one rule is three
+   * chances for the number beside a filter to disagree with the list it produces, and the operator
+   * has no way to tell which one is lying.
+   *
+   * "all" is how a cleared filter arrives from a toggle link, and means the same as absent.
+   */
+  const withinView = rows.filter((b) =>
+    matchesFilters(b as unknown as LeadRow, { view, q: current.q, claimed: current.claimed }, ctx),
+  );
+
+  const countIf = (extra: Partial<Filters>) => {
+    const f: Filters = { ...current, ...extra, view };
+    for (const key of Object.keys(f) as (keyof Filters)[]) {
+      if (f[key] === "all") delete f[key];
+    }
+    return rows.filter((b) => matchesFilters(b as unknown as LeadRow, f, ctx)).length;
+  };
 
   const anyFilter = Boolean(
     current.tier ||
@@ -680,7 +648,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               // Release use `formAction` rather than forms of their own — a form inside a form is
               // invalid, and the browser's response is to drop the inner one, which silently broke
               // the Claim button for as long as it was written that way.
-              <form action="/records/enrich" method="get" style={{ ...PANEL, marginBottom: 0, overflowX: "auto" }}>
+              <form action={getPaidDataForTicked} style={{ ...PANEL, marginBottom: 0, overflowX: "auto" }}>
                 {Object.entries(current).map(([key, value]) => (
                   <input key={key} type="hidden" name={`f_${key}`} value={value} />
                 ))}
@@ -748,28 +716,64 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                         is not a column it can filter on — it would silently price a different set
                         of businesses than the one on screen. Ticking rows still works there. */}
                     {view !== "unanalysed" && (
-                      <button className="btn-2 btn" type="submit" name="scope" value="filtered" style={{ padding: "6px 12px", fontSize: 15 }}>
+                      <button
+                        className="btn-2 btn"
+                        type="submit"
+                        formAction={getPaidDataForFiltered}
+                        style={{ padding: "6px 12px", fontSize: 15 }}
+                      >
                         Get paid data for all {shown.length}
                       </button>
                     )}
                     <button className="btn" type="submit" style={{ padding: "6px 12px", fontSize: 15 }}>
                       Get paid data for ticked
                     </button>
+
+                    {/*
+                      * Reads only the ticked businesses.
+                      *
+                      * `formAction` rather than a form of its own, because a checkbox belongs to
+                      * exactly one form and these ticks already belong to the buy form around the
+                      * table. Overriding where this one button submits is what lets the same ticks
+                      * drive two different things — which is what the operator asked for: the
+                      * whole-list button at the top does everything, this does only what they chose.
+                      *
+                      * Free of any provider charge except the model's read, the same 0.36¢ a site
+                      * the top button quotes.
+                      */}
+                    <button
+                      className="btn-2 btn"
+                      type="submit"
+                      formAction={auditTickedWebsites}
+                      style={{ padding: "6px 12px", fontSize: 15 }}
+                    >
+                      Read ticked page by page
+                    </button>
                   </span>
                 </div>
 
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1290 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1290, tableLayout: "fixed" }}>
                   <thead style={{ background: "var(--surface-2)" }}>
                     <tr>
-                      <Th label="" explain="tick" width={38} />
+                      {/*
+                        * Percentages for the columns that hold sentences, pixels for the ones that
+                        * hold a fixed thing.
+                        *
+                        * "Business" had no width at all, so it absorbed every spare pixel — on a
+                        * wide screen it ran to nearly a thousand pixels for a name and a town while
+                        * "What to sell them", which is a paragraph, was squeezed into 230. The
+                        * columns now grow and shrink together instead of one of them taking
+                        * whatever the others left.
+                        */}
+                      <Th label="" explain="tick" width={40} />
                       <Th label="No." explain="1 is best" width={62} />
-                      <Th label="Business" explain="Click to open the full report" />
-                      <Th label="What to sell them" explain="The area with the most wrong" width={230} />
-                      <Th label="Scores" explain="Problem: how much is wrong. Signals: do they pay for things?" width={160} />
-                      <Th label="Category" explain="From your own rules" width={150} />
-                      <Th label="Instagram" explain="Followers, and whether they advertise" width={130} />
-                      <Th label="Contact" explain="What we have to reach them" width={110} />
-                      <Th label="" width={86} />
+                      <Th label="Business" explain="Click to open the full report" width="21%" />
+                      <Th label="What to sell them" explain="The area with the most wrong" width="23%" />
+                      <Th label="Scores" explain="Problem: how much is wrong. Signals: do they pay?" width={168} />
+                      <Th label="Category" explain="From your own rules" width="13%" />
+                      <Th label="Instagram" explain="Followers, and whether they advertise" width="12%" />
+                      <Th label="Contact" explain="What we have to reach them" width="11%" />
+                      <Th label="" explain="claim" width={96} />
                     </tr>
                   </thead>
                   <tbody>
@@ -780,8 +784,10 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                       const seen = b.scored_at !== null;
                       const contact = contactable.get(b.id);
                       const has = [contact?.email ? "email" : null, contact?.phone ? "phone" : null].filter(Boolean);
+                      // What is missing, as a tint. See leadGap in lib/lead-filters.ts.
+                      const gap = leadGap(b as unknown as LeadRow, social);
                       return (
-                        <tr key={b.id}>
+                        <tr key={b.id} style={gap ? { background: ROW_TINT[gap] } : undefined}>
                           <td style={TD}>
                             <input
                               type="checkbox"
@@ -915,6 +921,39 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                     })}
                   </tbody>
                 </table>
+
+                {/* The key to the tints. Without it three shades of almost-white are a mystery, and
+                    a colour the operator has to ask about is worse than no colour. */}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 20,
+                    flexWrap: "wrap",
+                    padding: "11px 16px",
+                    borderTop: "1px solid var(--rule)",
+                    fontSize: 14.5,
+                    color: "var(--ink-2)",
+                  }}
+                >
+                  <span style={{ fontWeight: 700, color: "var(--ink)" }}>Row colours:</span>
+                  {ROW_TINT_MEANING.map((m) => (
+                    <span key={m.says} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 26,
+                          height: 15,
+                          borderRadius: 4,
+                          background: m.tint,
+                          border: "1px solid var(--rule-2)",
+                          flex: "0 0 auto",
+                        }}
+                      />
+                      {m.says}
+                    </span>
+                  ))}
+                  <span style={{ color: "var(--ink-2)" }}>White means they have both, or nothing is known yet.</span>
+                </div>
 
                 <Note>
                   <strong>Problem</strong> is how much is wrong with their online presence, out of

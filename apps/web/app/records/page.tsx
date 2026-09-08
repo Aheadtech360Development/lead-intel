@@ -60,30 +60,34 @@ const ROW_TINT: Record<LeadTint, string> = {
  * Ordered by how much attention the row deserves, so the key reads top to bottom the way the work
  * does — best call first.
  */
-const ROW_TINT_MEANING: { tint: string; has: string; hasNot: string; why: string }[] = [
+const ROW_TINT_MEANING: { tint: string; short: string; has: string; hasNot: string; why: string }[] = [
   {
     tint: "var(--row-red)",
+    short: "Reviews only",
     has: "Google reviews",
     hasNot: "website, Instagram",
-    why: "Proven customers, nowhere online to send them. Call these first.",
+    why: "Proven customers and nowhere online to send them. Call these first.",
   },
   {
     tint: "var(--row-blue)",
+    short: "No website",
     has: "Instagram",
     hasNot: "working website",
     why: "An audience already built, and no site behind it.",
   },
   {
     tint: "var(--row-peach)",
+    short: "No Instagram",
     has: "working website",
     hasNot: "Instagram",
     why: "Findable, but absent from the platform their customers use.",
   },
   {
     tint: "var(--row-green)",
+    short: "Has both",
     has: "website, Instagram",
     hasNot: "nothing missing",
-    why: "Both in place. Least to sell them.",
+    why: "A working site and an Instagram account. Least to sell them.",
   },
 ];
 
@@ -156,6 +160,17 @@ interface Filters {
   q?: string;
   /** "me" | "anyone" | "nobody" — who has claimed it. */
   claimed?: string;
+  /** "colour" groups the list by what each business is missing. Anything else is the usual order. */
+  sort?: string;
+  /**
+   * "1" renders every visible row already ticked.
+   *
+   * A select-all box that actually ticks the others needs JavaScript, and this application has
+   * none. A link that reloads the page with every checkbox rendered checked reaches the same place
+   * by the same mechanism every filter here already uses — and it survives without scripting, which
+   * a checkbox listener would not.
+   */
+  all?: string;
 }
 
 interface PageParams extends Filters {
@@ -198,6 +213,8 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     ...(params.minFollowers && params.minFollowers !== "all" ? { minFollowers: params.minFollowers } : {}),
     ...(params.q && params.q.trim() ? { q: params.q.trim() } : {}),
     ...(params.claimed && params.claimed !== "all" ? { claimed: params.claimed } : {}),
+    ...(params.sort && params.sort !== "all" ? { sort: params.sort } : {}),
+    ...(params.all === "1" ? { all: "1" } : {}),
   };
 
   const supabase = await createClient();
@@ -265,6 +282,34 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
   const shown = rows.filter((b) =>
     matchesFilters(b as unknown as LeadRow, { ...current, view }, { social, userId: claims?.sub ?? null }),
   );
+
+  /**
+   * Grouped by colour, when asked.
+   *
+   * The rows arrive sorted by priority, which is the right default — the best call is the first
+   * row. Grouping by what is missing answers a different question: "show me every business with an
+   * audience and no website, together", which is how a morning of similar calls actually gets
+   * planned.
+   *
+   * Sorted, not filtered. Every business stays on the list; only the order changes.
+   */
+  if (current.sort === "colour") {
+    const rank: Record<string, number> = {
+      "nothing-but-demand": 0,
+      "no-website": 1,
+      "no-instagram": 2,
+      "has-both": 3,
+    };
+    shown.sort((a, b) => {
+      // Untinted last: "nobody knows yet" is not a group to work through, it is a gap in what we
+      // have looked at.
+      const ra = rank[leadTint(a as unknown as LeadRow, social) ?? ""] ?? 4;
+      const rb = rank[leadTint(b as unknown as LeadRow, social) ?? ""] ?? 4;
+      if (ra !== rb) return ra - rb;
+      // Inside a colour, the original order stands — priority first.
+      return 0;
+    });
+  }
 
   // Every count in the sidebar is "how many would I see if I clicked this", measured against the
   // filters already on — not a global total. A count that ignores the current selection sends the
@@ -739,7 +784,66 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
                     {view === "ready" ? "worth calling" : view === "unanalysed" ? "not analysed yet" : "in total"}
                   </span>
+                  {/*
+                    * The colours, as buttons rather than as a caption.
+                    *
+                    * They were a block of four explanations wedged between the toolbar and the
+                    * column headings, which is the one place on this screen where the eye is
+                    * already busiest — the operator's report was that it was confusing there, and
+                    * it was: a legend looks like a heading when it sits where headings go.
+                    *
+                    * Here each colour is a swatch you can press to group the list by it, so the key
+                    * and the control are the same object. Hovering names the rule in full; nothing
+                    * has to be read to use the list.
+                    */}
+                  <span style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 14.5, color: "var(--ink-2)" }}>Colours:</span>
+                    {ROW_TINT_MEANING.map((m) => (
+                      <Link
+                        key={m.has + m.hasNot}
+                        href={toggle(current, "sort", "colour")}
+                        title={`${m.short} — ${m.why}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          padding: "3px 9px 3px 5px",
+                          borderRadius: 99,
+                          border: "1px solid var(--rule-2)",
+                          background: current.sort === "colour" ? m.tint : "var(--surface)",
+                          textDecoration: "none",
+                          fontSize: 14,
+                          color: "var(--ink)",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <span
+                          aria-hidden
+                          style={{
+                            width: 15,
+                            height: 15,
+                            borderRadius: 4,
+                            background: m.tint,
+                            border: "1px solid var(--rule-2)",
+                          }}
+                        />
+                        {m.short}
+                      </Link>
+                    ))}
+                    <span style={{ fontSize: 14, color: "var(--ink-2)" }}>
+                      {current.sort === "colour" ? (
+                        <Link href={href(current, { sort: "all" })}>back to priority order</Link>
+                      ) : (
+                        "click one to group the list by colour"
+                      )}
+                    </span>
+                  </span>
+
                   <span style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    {/* Zero-JavaScript select-all: a link that re-renders every row already ticked. */}
+                    <Link href={href(current, { all: current.all === "1" ? "" : "1" })} style={{ fontSize: 15 }}>
+                      {current.all === "1" ? `Untick all ${shown.length}` : `Tick all ${shown.length}`}
+                    </Link>
                     <a href={`/records/export${href(current, {}).replace("/records", "")}`} style={{ fontSize: 15 }}>
                       Download CSV
                     </a>
@@ -784,73 +888,6 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   </span>
                 </div>
 
-                {/*
-                  * The key, above the rows rather than below them.
-                  *
-                  * It was under the table, which is where an explanation goes to be found only by
-                  * someone who already knew to look. A colour has to be decodable before the list
-                  * is read, not after.
-                  */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-                    gap: "8px 18px",
-                    padding: "12px 16px",
-                    borderBottom: "1px solid var(--rule)",
-                    background: "var(--surface-2)",
-                  }}
-                >
-                  {ROW_TINT_MEANING.map((m) => (
-                    <div key={m.has + m.hasNot} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 22,
-                          height: 22,
-                          borderRadius: 5,
-                          background: m.tint,
-                          border: "1px solid var(--rule-2)",
-                          flex: "0 0 auto",
-                          marginTop: 1,
-                        }}
-                      />
-                      <span style={{ fontSize: 14.5, lineHeight: 1.45, minWidth: 0 }}>
-                        <span style={{ color: "var(--good-ink)", fontWeight: 700 }}>Has</span>{" "}
-                        <span style={{ color: "var(--ink)", fontWeight: 650 }}>{m.has}</span>
-                        {m.hasNot === "nothing missing" ? null : (
-                          <>
-                            {" · "}
-                            <span style={{ color: "var(--bad-ink)", fontWeight: 700 }}>No</span>{" "}
-                            <span style={{ color: "var(--ink)", fontWeight: 650 }}>{m.hasNot}</span>
-                          </>
-                        )}
-                        <span style={{ display: "block", color: "var(--ink-2)" }}>{m.why}</span>
-                      </span>
-                    </div>
-                  ))}
-                  <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
-                    <span
-                      aria-hidden
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 5,
-                        background: "var(--surface)",
-                        border: "1px solid var(--rule-2)",
-                        flex: "0 0 auto",
-                        marginTop: 1,
-                      }}
-                    />
-                    <span style={{ fontSize: 14.5, lineHeight: 1.45 }}>
-                      <span style={{ color: "var(--ink)", fontWeight: 650 }}>No colour</span>
-                      <span style={{ display: "block", color: "var(--ink-2)" }}>
-                        Nobody knows yet — usually a site we could not reach. Not a claim either way.
-                      </span>
-                    </span>
-                  </div>
-                </div>
-
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1290, tableLayout: "fixed" }}>
                   <thead style={{ background: "var(--surface-2)" }}>
                     <tr>
@@ -864,7 +901,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                         * columns now grow and shrink together instead of one of them taking
                         * whatever the others left.
                         */}
-                      <Th label="" explain="tick" width={40} />
+                      <Th label="" width={40} />
                       <Th label="No." explain="1 is best" width={62} />
                       <Th label="Business" explain="Click to open the full report" width="21%" />
                       <Th label="What to sell them" explain="The area with the most wrong" width="23%" />
@@ -892,6 +929,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                               type="checkbox"
                               name="id"
                               value={b.id}
+                              // Ticked by the "select all" link in the header, which reloads with
+                              // `all=1` rather than running a script. See the Filters type.
+                              defaultChecked={current.all === "1"}
                               aria-label={`Select ${b.display_name}`}
                               style={{ width: 16, height: 16, cursor: "pointer" }}
                             />

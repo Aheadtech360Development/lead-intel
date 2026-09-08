@@ -451,19 +451,49 @@ export default async function RecordDetailPage({
           * finished ones included, so "did that audit actually run?" is answered on the page where
           * the question is asked rather than by navigating away and hoping.
           */}
-        {businessJobs.length > 0 && (
-          <Panel
-            title="What has been run on this business"
-            hint="Newest first. A job still going updates itself while you watch."
-            tone={businessJobs.some((j) => j.status === "running" || j.status === "queued") ? "brand" : "plain"}
-          >
-            <div style={{ padding: "6px 18px 16px" }}>
-              {businessJobs.map((job) => (
-                <JobLine key={job.id} job={job} compact />
-              ))}
-            </div>
-          </Panel>
-        )}
+        {businessJobs.length > 0 &&
+          (() => {
+            const live = businessJobs.filter((j) => j.status === "running" || j.status === "queued");
+            return (
+              <div className="card" style={{ marginBottom: 18 }} {...(live.length > 0 ? { "data-tone": "brand" } : {})}>
+                {/*
+                  * Closed unless something is actually running.
+                  *
+                  * Every re-run leaves a row here, so after a few attempts this was five paragraphs
+                  * of finished job summaries sitting between the operator and the record they came
+                  * to read. A `<details>` needs no JavaScript and remembers nothing, which is right:
+                  * the useful default is "hidden", and the exception — a job in flight — opens it by
+                  * itself.
+                  */}
+                <details open={live.length > 0}>
+                  <summary
+                    style={{
+                      padding: "14px 18px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span style={{ fontSize: 18, fontWeight: 750, color: "var(--ink)" }}>
+                      What has been run on this business
+                    </span>
+                    <span style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
+                      {live.length > 0
+                        ? `${live.length} running now`
+                        : `${businessJobs.length} finished — click to see`}
+                    </span>
+                  </summary>
+                  <div style={{ padding: "0 18px 16px", borderTop: "1px solid var(--rule)" }}>
+                    {businessJobs.map((job) => (
+                      <JobLine key={job.id} job={job} compact />
+                    ))}
+                  </div>
+                </details>
+              </div>
+            );
+          })()}
 
         {/*
           * Everything known about them, in one place, grouped by who told us.

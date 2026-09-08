@@ -1,6 +1,6 @@
 import { BUSINESS_ORIGIN_LABELS, BUSINESS_ORIGINS, type BusinessOrigin } from "@lead-intel/shared";
 import Link from "next/link";
-import { leadGap, loadSocialFacts, matchesFilters, type LeadRow } from "@/lib/lead-filters";
+import { leadTint, loadSocialFacts, matchesFilters, type LeadRow, type LeadTint } from "@/lib/lead-filters";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
 import {
@@ -43,16 +43,48 @@ import {
  * Kept beside the legend that explains them, so a colour cannot be added without a line telling the
  * operator what it says. A tint nobody can decode is decoration.
  */
-const ROW_TINT: Record<"no-website" | "no-instagram" | "nothing-but-demand", string> = {
-  "no-website": "var(--row-gray)",
-  "no-instagram": "var(--row-peach)",
+const ROW_TINT: Record<LeadTint, string> = {
   "nothing-but-demand": "var(--row-red)",
+  "no-website": "var(--row-blue)",
+  "no-instagram": "var(--row-peach)",
+  "has-both": "var(--row-green)",
 };
 
-const ROW_TINT_MEANING: { tint: string; says: string }[] = [
-  { tint: "var(--row-red)", says: "Reviews on Google, but no website and no Instagram — the strongest call on the list" },
-  { tint: "var(--row-gray)", says: "Has Instagram, no working website — an audience with nowhere to send it" },
-  { tint: "var(--row-peach)", says: "Website works, no Instagram found" },
+/**
+ * The key to the row colours.
+ *
+ * Written as what they **have** and what they **have not**, rather than as a sentence to interpret.
+ * The operator asked to be told "kis color se kia hai or nhi hai", and a legend that says "an
+ * audience with nowhere to send it" is prose about a colour rather than a definition of one.
+ *
+ * Ordered by how much attention the row deserves, so the key reads top to bottom the way the work
+ * does — best call first.
+ */
+const ROW_TINT_MEANING: { tint: string; has: string; hasNot: string; why: string }[] = [
+  {
+    tint: "var(--row-red)",
+    has: "Google reviews",
+    hasNot: "website, Instagram",
+    why: "Proven customers, nowhere online to send them. Call these first.",
+  },
+  {
+    tint: "var(--row-blue)",
+    has: "Instagram",
+    hasNot: "working website",
+    why: "An audience already built, and no site behind it.",
+  },
+  {
+    tint: "var(--row-peach)",
+    has: "working website",
+    hasNot: "Instagram",
+    why: "Findable, but absent from the platform their customers use.",
+  },
+  {
+    tint: "var(--row-green)",
+    has: "website, Instagram",
+    hasNot: "nothing missing",
+    why: "Both in place. Least to sell them.",
+  },
 ];
 
 const WHOLE_LIST_JOBS: {
@@ -752,6 +784,73 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   </span>
                 </div>
 
+                {/*
+                  * The key, above the rows rather than below them.
+                  *
+                  * It was under the table, which is where an explanation goes to be found only by
+                  * someone who already knew to look. A colour has to be decodable before the list
+                  * is read, not after.
+                  */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
+                    gap: "8px 18px",
+                    padding: "12px 16px",
+                    borderBottom: "1px solid var(--rule)",
+                    background: "var(--surface-2)",
+                  }}
+                >
+                  {ROW_TINT_MEANING.map((m) => (
+                    <div key={m.has + m.hasNot} style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 22,
+                          height: 22,
+                          borderRadius: 5,
+                          background: m.tint,
+                          border: "1px solid var(--rule-2)",
+                          flex: "0 0 auto",
+                          marginTop: 1,
+                        }}
+                      />
+                      <span style={{ fontSize: 14.5, lineHeight: 1.45, minWidth: 0 }}>
+                        <span style={{ color: "var(--good-ink)", fontWeight: 700 }}>Has</span>{" "}
+                        <span style={{ color: "var(--ink)", fontWeight: 650 }}>{m.has}</span>
+                        {m.hasNot === "nothing missing" ? null : (
+                          <>
+                            {" · "}
+                            <span style={{ color: "var(--bad-ink)", fontWeight: 700 }}>No</span>{" "}
+                            <span style={{ color: "var(--ink)", fontWeight: 650 }}>{m.hasNot}</span>
+                          </>
+                        )}
+                        <span style={{ display: "block", color: "var(--ink-2)" }}>{m.why}</span>
+                      </span>
+                    </div>
+                  ))}
+                  <div style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 5,
+                        background: "var(--surface)",
+                        border: "1px solid var(--rule-2)",
+                        flex: "0 0 auto",
+                        marginTop: 1,
+                      }}
+                    />
+                    <span style={{ fontSize: 14.5, lineHeight: 1.45 }}>
+                      <span style={{ color: "var(--ink)", fontWeight: 650 }}>No colour</span>
+                      <span style={{ display: "block", color: "var(--ink-2)" }}>
+                        Nobody knows yet — usually a site we could not reach. Not a claim either way.
+                      </span>
+                    </span>
+                  </div>
+                </div>
+
                 <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1290, tableLayout: "fixed" }}>
                   <thead style={{ background: "var(--surface-2)" }}>
                     <tr>
@@ -784,10 +883,10 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                       const seen = b.scored_at !== null;
                       const contact = contactable.get(b.id);
                       const has = [contact?.email ? "email" : null, contact?.phone ? "phone" : null].filter(Boolean);
-                      // What is missing, as a tint. See leadGap in lib/lead-filters.ts.
-                      const gap = leadGap(b as unknown as LeadRow, social);
+                      // How this row is tinted. See leadTint in lib/lead-filters.ts.
+                      const tint = leadTint(b as unknown as LeadRow, social);
                       return (
-                        <tr key={b.id} style={gap ? { background: ROW_TINT[gap] } : undefined}>
+                        <tr key={b.id} style={tint ? { background: ROW_TINT[tint] } : undefined}>
                           <td style={TD}>
                             <input
                               type="checkbox"
@@ -921,39 +1020,6 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                     })}
                   </tbody>
                 </table>
-
-                {/* The key to the tints. Without it three shades of almost-white are a mystery, and
-                    a colour the operator has to ask about is worse than no colour. */}
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 20,
-                    flexWrap: "wrap",
-                    padding: "11px 16px",
-                    borderTop: "1px solid var(--rule)",
-                    fontSize: 14.5,
-                    color: "var(--ink-2)",
-                  }}
-                >
-                  <span style={{ fontWeight: 700, color: "var(--ink)" }}>Row colours:</span>
-                  {ROW_TINT_MEANING.map((m) => (
-                    <span key={m.says} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-                      <span
-                        aria-hidden
-                        style={{
-                          width: 26,
-                          height: 15,
-                          borderRadius: 4,
-                          background: m.tint,
-                          border: "1px solid var(--rule-2)",
-                          flex: "0 0 auto",
-                        }}
-                      />
-                      {m.says}
-                    </span>
-                  ))}
-                  <span style={{ color: "var(--ink-2)" }}>White means they have both, or nothing is known yet.</span>
-                </div>
 
                 <Note>
                   <strong>Problem</strong> is how much is wrong with their online presence, out of

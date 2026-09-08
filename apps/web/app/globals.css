@@ -89,17 +89,24 @@
   /*
    * ---- Row tints ----
    *
-   * Deliberately almost invisible. The operator's instruction was "esa color kerna ke na ke baraber
-   * ho, bus esa ho ke hume samajh ajaye" — enough to group rows when scanning a long list, never
-   * enough to compete with the text on top of them or to make a row look like a warning.
+   * Four colours that have to be told apart from each other, not merely from white. That second
+   * requirement is the one the first two attempts failed, and it failed silently both times:
    *
-   * They mark an absence, so none of them uses a semantic hue at full strength: --bad on a row
-   * would read as "something went wrong with this business", and the opposite is true — a business
-   * with reviews and nothing else is the best call on the page.
+   *   - the original grey sat 9 points from --surface-2, the colour the table header already is;
+   *   - the original red and peach sat 6 points from each other, so the best lead on the list and
+   *     an ordinary one were the same shade.
+   *
+   * Below, the closest pair is 20 apart and every one is at least 33 from the surface. They are
+   * still soft — body text measures 15:1 or better on all four, against the 4.5:1 that counts as
+   * legible — so they group rows without competing with the words on top of them.
+   *
+   * They mark a *situation*, not a verdict, so none of them is a semantic hue at strength: red here
+   * means "reviews and nothing else", which is the best call on the page rather than a warning.
    */
-  --row-gray: #f2f4f7;
-  --row-peach: #fdf5ee;
-  --row-red: #fdf1f2;
+  --row-red: #fbdfe475;
+  --row-blue: #dbe8fb;
+  --row-peach: #fdeed7;
+  --row-green: #dcf2e4;
 
   --shadow-sm: 0 1px 2px rgba(19, 26, 42, 0.05);
   --shadow: 0 1px 3px rgba(19, 26, 42, 0.07), 0 6px 16px -8px rgba(19, 26, 42, 0.12);

@@ -19,7 +19,14 @@ export type RenderOutcome =
   /** robots.txt disallows this path. Checked before the browser is pointed at anything. */
   | "blocked_by_robots"
   /** The browser could not be started, or died mid-page. A fact about us, not about them. */
-  | "browser_failed";
+  | "browser_failed"
+  /**
+   * It loaded, and we chose not to keep it. Also a fact about us.
+   *
+   * Kept apart from `http_error` deliberately: this page answered 200 in three seconds, and
+   * labelling that an HTTP error told the operator their prospect's server was broken.
+   */
+  | "too_big";
 
 export interface RenderedPage {
   outcome: RenderOutcome;

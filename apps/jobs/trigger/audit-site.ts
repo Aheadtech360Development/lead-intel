@@ -83,7 +83,8 @@ export const auditSiteTask = task({
           `Read ${summary.pagesAudited} ${summary.pagesAudited === 1 ? "page" : "pages"}, ` +
           `${summary.pagesReadable} of them fully. ` +
           `${summary.screenshotsStored > 0 ? `Kept ${summary.screenshotsStored} screenshot${summary.screenshotsStored === 1 ? "" : "s"}. ` : ""}` +
-          `${critique.critiqued} judged by the model` +
+          `${summary.socialSaved.length > 0 ? `Found their ${summary.socialSaved.includes("instagram_handle") ? "Instagram" : ""}${summary.socialSaved.includes("instagram_handle") && summary.socialSaved.includes("facebook_url") ? " and " : ""}${summary.socialSaved.includes("facebook_url") ? "Facebook" : ""} on their site and saved it. ` : ""}` +
+        `${critique.critiqued} judged by the model` +
           `${critique.costCents > 0 ? `, costing ${critique.costCents.toFixed(2)}¢ of Gemini` : ""}.` +
           // Why the model judged fewer pages than were read. Without this the line said
           // "0 judged by the model." and stopped, which is a result with its reason removed — the

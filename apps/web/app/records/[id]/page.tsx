@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { loadJobsForBusiness } from "@/lib/job-runs";
 import { loadScorecards } from "@/lib/page-scorecards";
 import { auditWebsite } from "./audit-actions";
+import { analyseUnscored } from "../analyse-actions";
 import { createClient } from "@/lib/supabase/server";
 import { explainBusiness } from "./explain-actions";
 import { saveInstagramUrl } from "./social-actions";
@@ -20,6 +21,7 @@ import {
   Note,
   PANEL,
   Panel,
+  Price,
   ROUTE_LABELS,
   Stars,
   TD,
@@ -381,6 +383,66 @@ export default async function RecordDetailPage({
             </p>
           )}
         </div>
+
+        {/*
+          * Everything that can be run on this one business, in one place.
+          *
+          * The whole-list versions of these live on the leads screen, which is the wrong place when
+          * the operator is looking at a single record and wants that record fixed. Both are scoped
+          * to this business alone.
+          */}
+        <Panel
+          title="Run something on this business"
+          hint="Both of these work on this business only, not the whole list."
+          tone="brand"
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 1, background: "var(--rule)" }}>
+            <div style={{ background: "var(--surface)", padding: "16px 18px" }}>
+              <div style={{ fontSize: 16.5, fontWeight: 750 }}>Re-read their website and re-score</div>
+              <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55, margin: "5px 0 11px" }}>
+                Fetches their pages again, runs all 51 checks, and works the scores out afresh. This is
+                the quick one &mdash; it uses a plain fetch, so a site that blocks robots will block it
+                again.
+              </div>
+              <form action={analyseUnscored} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <input type="hidden" name="id" value={id} />
+                <input type="hidden" name="back" value={`/records/${id}`} />
+                <button className="btn-2 btn" type="submit">
+                  Re-read and re-score
+                </button>
+                <Price cents={0} free what="reading their pages and scoring them" platform="our own crawler, on Trigger.dev" />
+              </form>
+            </div>
+
+            <div style={{ background: "var(--surface)", padding: "16px 18px" }}>
+              <div style={{ fontSize: 16.5, fontWeight: 750 }}>Open it in a real browser, page by page</div>
+              <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55, margin: "5px 0 11px" }}>
+                Walks their pages in Chromium, measures the layout, keeps a screenshot of the home and
+                product pages, and asks the model what the measurements miss.{" "}
+                <strong>
+                  It also reads the links in their footer, so this is what finds an Instagram account on
+                  a site the plain crawler cannot open.
+                </strong>
+              </div>
+              <form action={auditWebsite} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                <input type="hidden" name="id" value={id} />
+                <button className="btn" type="submit" disabled={!websiteUrl}>
+                  {scorecards.length > 0 ? "Read it again, page by page" : "Read it page by page"}
+                </button>
+                <Price
+                  cents={0.36}
+                  what="the model's read on each page"
+                  platform="Google AI Studio (Gemini), plus browser time on Trigger.dev"
+                />
+              </form>
+              {!websiteUrl ? (
+                <div style={{ fontSize: 14.5, color: "var(--ink-2)", marginTop: 8 }}>
+                  There is no web address on this record, so there is nothing to open.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </Panel>
 
         {/*
           * Anything this business is currently going through.

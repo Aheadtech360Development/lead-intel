@@ -1,6 +1,6 @@
 import { choosePages, classifyPage, extractStructure, type ChosenPage } from "@lead-intel/core";
 import { businesses, describeDbError, fieldMetadata, pageAudits, type Database } from "@lead-intel/db";
-import { screenshotPath, supabaseStorage } from "@lead-intel/providers";
+import { instagramHandle, screenshotPath, supabaseStorage } from "@lead-intel/providers";
 import { isRenderOk, renderPage, startBrowser, type RenderedPage } from "@lead-intel/providers/render";
 import * as cheerio from "cheerio";
 import { and, eq } from "drizzle-orm";
@@ -28,6 +28,8 @@ export interface SiteAuditSummary {
   /** Set when nothing could be audited at all, with the reason. */
   failed: string | null;
   screenshotsStored: number;
+  /** Social accounts found in a footer and written to the record, by platform. */
+  socialSaved: string[];
   /**
    * Why no picture was kept, when none was. Reported rather than swallowed: a missing screenshot
    * with no explanation looks identical to a page that had nothing worth showing, and the first
@@ -64,6 +66,7 @@ export async function auditSite(
     types: [] as string[],
     screenshotsStored: 0,
     screenshotProblem: null,
+    socialSaved: [] as string[],
   };
 
   const [business] = await db
@@ -105,6 +108,22 @@ export async function auditSite(
     let screenshotsStored = 0;
     let screenshotProblem: string | null = null;
 
+    /**
+     * Social accounts linked from anywhere on any page, gathered as we go.
+     *
+     * These were already being extracted and already being thrown away: `extractStructure` reads
+     * them on every page and stores them inside `page_audits.structure`, where nothing ever looked
+     * at them again. The operator found this the direct way — opened a lead's website by the link
+     * on its own record, saw an Instagram link on the page, and the record said "No account
+     * known".
+     *
+     * It matters most exactly where the plain crawler cannot help. That business answers a plain
+     * fetch with **403 Forbidden** and zero pages read, while a real browser loads it perfectly —
+     * so for a site like that this is the only route to its Instagram account, and without an
+     * account the follower count cannot be bought at any price.
+     */
+    const socialFound = new Map<string, string>();
+
     const homeShot = await storeAudit(db, businessId, { url: homeUrl, type: "home", because: "Every audit starts at the home page." }, home, "certain", "It is the site's root address.");
     if (homeShot.path) screenshotsStored += 1;
     screenshotProblem ??= homeShot.problem;
@@ -116,6 +135,10 @@ export async function auditSite(
         elapsedMs: Date.now() - startedAt,
         failed: `The home page could not be read (${home.outcome}), so there was nothing to find the other pages from.`,
       };
+    }
+
+    for (const link of extractStructure(home.html).socialLinks) {
+      socialFound.set(link.platform, link.url);
     }
 
     // The site's own navigation is the only sitemap that always exists.
@@ -163,6 +186,12 @@ export async function auditSite(
       if (shot.path) screenshotsStored += 1;
       screenshotProblem ??= shot.problem;
 
+      if (isRenderOk(rendered)) {
+        for (const link of extractStructure(rendered.html).socialLinks) {
+          if (!socialFound.has(link.platform)) socialFound.set(link.platform, link.url);
+        }
+      }
+
       types.push(classification.type);
       if (isRenderOk(rendered)) readable += 1;
       await progress?.tick(`Read ${types.length} of ${chosen.length}: ${page.url.replace(/^https?:\/\/[^/]+/, "") || "/"}`);
@@ -190,9 +219,12 @@ export async function auditSite(
       if (!kept.has(row.url)) await db.delete(pageAudits).where(eq(pageAudits.id, row.id));
     }
 
+    const socialSaved = await saveSocialLinks(db, businessId, socialFound);
+
     return {
       businessId,
       pagesAudited: chosen.length,
+      socialSaved,
       pagesReadable: readable,
       types,
       elapsedMs: Date.now() - startedAt,
@@ -248,6 +280,71 @@ function reclassify(page: ChosenPage, rendered: RenderedPage & { html: string })
     // The visible text is what separates a shop from a services page called "shop".
     text: rendered.html.replace(/<[^>]+>/g, " ").slice(0, 20_000),
   });
+}
+
+/**
+ * Writes social accounts found on their site onto the record, without overwriting what is there.
+ *
+ * **Never overwrites.** An operator may have pasted a handle by hand — that is the whole point of
+ * the box on the record — and a crawl finding a different link in a footer is not grounds to
+ * replace a person's deliberate choice. Existing values win; only gaps are filled.
+ *
+ * Instagram addresses go through the same parser the paid lookup uses, so what is stored is what
+ * can actually be bought. It rejects Instagram's own routes (/p/, /reel/, /explore/) and the
+ * platform accounts — booksybiz, squarespace, wix — which is the check that stopped a braiding
+ * salon being recorded with Booksy's 142,191 followers.
+ */
+async function saveSocialLinks(
+  db: Database,
+  businessId: string,
+  found: Map<string, string>,
+): Promise<string[]> {
+  if (found.size === 0) return [];
+
+  const rows: { fieldName: string; value: string }[] = [];
+
+  const instagram = found.get("instagram");
+  if (instagram) {
+    const handle = instagramHandle(instagram);
+    if (handle) {
+      rows.push({ fieldName: "instagram_url", value: `https://instagram.com/${handle}` });
+      rows.push({ fieldName: "instagram_handle", value: handle });
+    }
+  }
+
+  const facebook = found.get("facebook");
+  if (facebook) rows.push({ fieldName: "facebook_url", value: facebook });
+
+  const saved: string[] = [];
+  for (const row of rows) {
+    const [existing] = await db
+      .select({ value: fieldMetadata.value })
+      .from(fieldMetadata)
+      .where(and(eq(fieldMetadata.businessId, businessId), eq(fieldMetadata.fieldName, row.fieldName)))
+      .limit(1);
+
+    if (existing?.value) continue;
+
+    try {
+      await db.insert(fieldMetadata).values({
+        businessId,
+        fieldName: row.fieldName,
+        value: row.value,
+        // Named for where it came from. This is a link read off their own page by a browser, which
+        // is a stronger provenance than a guess and a weaker one than a person typing it.
+        sourceName: "own_crawl",
+        verificationStatus: "verified",
+        lastVerifiedAt: new Date(),
+        updatedAt: new Date(),
+      });
+      saved.push(row.fieldName);
+    } catch {
+      // A link that will not store costs the link, not the audit. The measurements are the
+      // valuable part and they are already written by this point.
+    }
+  }
+
+  return saved;
 }
 
 /**

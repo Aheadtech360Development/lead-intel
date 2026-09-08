@@ -54,12 +54,29 @@ export interface PageStructure {
     hasMessageBox: boolean;
     requiredFields: number;
   };
+  /**
+   * Every social account linked from anywhere on the page, with its address.
+   *
+   * **Page-wide, not footer-scoped, and that distinction was learned the hard way.** The first
+   * version looked only inside the footer, because that is where these usually sit. On
+   * a4graphic.com the footer was found on all five pages and every one reported no social links —
+   * while the page plainly linked `instagram.com/a4_graphic_miami`, from a bar that is not the
+   * footer. Headers, floating rails and "follow us" strips carry these just as often.
+   *
+   * `footer.social` below stays footer-scoped and unchanged: it answers a different question — "do
+   * they bother putting these in the footer" — which is what a checklist rule asks. This answers
+   * "which account", which is what an operator asks, because a follower count cannot be bought
+   * without it.
+   */
+  socialLinks: { platform: string; url: string }[];
+
   footer: {
     present: boolean;
     hasAddress: boolean;
     hasHours: boolean;
     /** Platform links found in the footer, by platform name. */
     social: string[];
+
     /** The most recent copyright year, or null. A 2019 footer says the site was abandoned. */
     copyrightYear: number | null;
     navLinks: number;
@@ -104,6 +121,9 @@ export function extractStructure(html: string): PageStructure {
     .filter((t) => t.length > 0);
 
   return {
+    // The whole document, not one region. See the note on socialLinks in PageStructure.
+    socialLinks: socialIn($.root()),
+
     header: {
       present: header !== null,
       navLinks: header ? header.find("a").length : 0,
@@ -126,7 +146,7 @@ export function extractStructure(html: string): PageStructure {
         ? footer.find("address").length > 0 || /\b[A-Z]{2}\s+\d{5}(-\d{4})?\b/.test(footer.text())
         : false,
       hasHours: footer ? /\b(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b.{0,20}\d|opening hours|hours:/i.test(footer.text()) : false,
-      social: footer ? socialIn(footer) : [],
+      social: footer ? socialIn(footer).map((l) => l.platform) : [],
       copyrightYear: footer ? latestCopyrightYear(footer.text()) : null,
       navLinks: footer ? footer.find("a").length : 0,
     },
@@ -291,15 +311,17 @@ function extractForms($: cheerio.CheerioAPI): PageStructure["forms"] {
   return { count: forms.length, fields, hasMessageBox: messageBox, requiredFields: required };
 }
 
-function socialIn(node: Selection): string[] {
-  const found = new Set<string>();
+function socialIn(node: Selection): { platform: string; url: string }[] {
+  // First link per platform wins. A footer that lists Instagram twice is one account, and a page
+  // that links a personal and a business account puts the business one first almost every time.
+  const found = new Map<string, string>();
   node.find("a[href]").each((_, el) => {
     const href = (el as unknown as { attribs?: Record<string, string> }).attribs?.href ?? "";
     for (const { platform, pattern } of SOCIAL_HOSTS) {
-      if (pattern.test(href)) found.add(platform);
+      if (pattern.test(href) && !found.has(platform)) found.set(platform, href);
     }
   });
-  return [...found];
+  return [...found].map(([platform, url]) => ({ platform, url }));
 }
 
 /**

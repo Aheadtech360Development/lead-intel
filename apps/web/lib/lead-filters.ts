@@ -183,22 +183,26 @@ export async function loadSocialFacts(
  * cheaper and far safer than a second query that has to be kept in step by hand.
  */
 /**
- * What is missing from a business, as a single word, or null when nothing worth marking is.
+ * How a row is tinted, or null when nothing about it is worth marking.
  *
- * Used to tint the row. The point is to make three situations visible at a glance without reading
- * anything: they have an audience but nowhere to send it, they have a website but no social, or
- * they have proven demand and neither.
+ * Named for the tint rather than for a gap, because one of the four is the absence of a gap: a
+ * business with both a working site and an Instagram account gets its own colour precisely because
+ * there is nothing missing.
+ *
+ * The point is to make four situations legible at a glance without reading anything — they have
+ * proven demand and nothing else, an audience with nowhere to send it, a site but no social, or
+ * both.
  *
  * **"Couldn't check" is not "hasn't got".** A website we failed to reach produces no tint at all —
  * the same distinction this codebase keeps everywhere else, and colouring a row on a failed crawl
  * would be telling the operator something nobody established.
  */
-export type LeadGap = "no-website" | "no-instagram" | "nothing-but-demand";
+export type LeadTint = "no-website" | "no-instagram" | "nothing-but-demand" | "has-both";
 
-export function leadGap(
+export function leadTint(
   business: Pick<LeadRow, "id" | "website_status">,
   social: Map<string, SocialFacts>,
-): LeadGap | null {
+): LeadTint | null {
   const facts = social.get(business.id);
   const hasInstagram = Boolean(facts?.handle);
   const reviews = facts?.reviews ?? null;
@@ -227,6 +231,9 @@ export function leadGap(
   if (missing && !hasInstagram && reviews !== null && reviews > 0) return "nothing-but-demand";
   if (missing && hasInstagram) return "no-website";
   if (working && !hasInstagram) return "no-instagram";
+  // Both in place. Not a lead to open with, which is exactly why it is worth being able to skip at
+  // a glance rather than reading two columns to work it out.
+  if (working && hasInstagram) return "has-both";
   return null;
 }
 

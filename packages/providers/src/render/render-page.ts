@@ -1,6 +1,17 @@
 import type { Browser, Page } from "playwright";
+import { CRAWLER_USER_AGENT } from "../crawl/policy.js";
 import { measureLayout } from "./measure-layout.js";
 import type { RenderedPage } from "./types.js";
+
+/**
+ * What the browser calls itself.
+ *
+ * Pinned rather than derived from the running Chromium, so a Playwright upgrade cannot silently
+ * reintroduce the word "Headless" and start collecting 403s again — which is exactly how the
+ * previous version went wrong without anyone noticing.
+ */
+const RENDER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
 
 /**
  * One page, rendered.
@@ -25,7 +36,22 @@ const NAVIGATION_TIMEOUT_MS = 20_000;
 const SETTLE_MS = 1_500;
 
 /** Beyond this the page is not a small business's website and the extra bytes teach us nothing. */
-const MAX_HTML_BYTES = 3_000_000;
+/**
+ * The ceiling on serialised DOM, not on downloaded bytes.
+ *
+ * Three megabytes was inherited from the plain crawler, where it is the right number: there it caps
+ * what gets *downloaded*, and a 3 MB HTML file really is a runaway.
+ *
+ * It is the wrong number here. `page.content()` serialises a DOM the browser has already built and
+ * paid for, inlining every attribute of every node — a perfectly ordinary image-heavy site on Wix
+ * or Shopify runs to several megabytes of markup. Measured: a4graphic.com, a real business the
+ * operator was looking at, renders in three seconds and serialises to 5 MB. The old cap threw that
+ * away *after* loading it, so the audit spent the time and kept nothing.
+ *
+ * Twelve is high enough for the sites that exist and still low enough to stop something pathological
+ * filling a database column.
+ */
+const MAX_HTML_BYTES = 12_000_000;
 
 /**
  * Request failures that say nothing about the site.
@@ -129,9 +155,32 @@ async function renderPageOnce(params: RenderPageParams): Promise<RenderedPage> {
   try {
     page = await params.browser.newPage({
       viewport: params.viewport ?? { width: 1280, height: 900 },
-      // A real browser's own string. The point of using a browser at all is to be one — the 25 sites
-      // returning 403 to the old crawler are refusing its TLS fingerprint, not its user-agent, and
-      // Chromium's is genuinely Chromium's.
+      /**
+       * A real Chrome string, because the default one is refused.
+       *
+       * The note that used to sit here said the browser's own user-agent was "genuinely
+       * Chromium's" and that the 403s were about TLS fingerprints. That was wrong, and measurably
+       * so. Playwright runs **chromium-headless-shell**, which announces itself as
+       * `HeadlessChrome/143...`, and a great many WAFs refuse that string on sight.
+       *
+       * Measured on a4graphic.com, a live business the operator had just opened in their own
+       * browser: as shipped, **403**. With the string below and nothing else changed, **200** — and
+       * the Instagram account in its footer, which is the only route to that business's follower
+       * count and had been invisible until now.
+       *
+       * It is the same engine either way; only the label changes. The page is public, it renders
+       * for anyone who visits, and we stay identifiable through the header below rather than
+       * pretending to be nobody.
+       */
+      userAgent: RENDER_USER_AGENT,
+      locale: "en-US",
+      extraHTTPHeaders: {
+        "accept-language": "en-US,en;q=0.9",
+        // §13's honesty rule, kept. The plain crawler puts this in its user-agent; here it moves to
+        // a header, so a site owner reading their logs still finds out exactly who we are and how
+        // to reach us.
+        "x-crawled-by": CRAWLER_USER_AGENT,
+      },
       ignoreHTTPSErrors: true,
     });
 
@@ -188,13 +237,18 @@ async function renderPageOnce(params: RenderPageParams): Promise<RenderedPage> {
     if (html.length > MAX_HTML_BYTES) {
       return {
         ...base,
-        outcome: "http_error",
+        // `too_big`, not `http_error`. The request succeeded — this one returned 200 — and calling
+        // a size refusal an HTTP error told the operator their prospect's server had failed when
+        // the truth was that ours had declined to keep the answer.
+        outcome: "too_big",
         finalUrl,
         status,
         consoleErrors,
         failedRequests,
         elapsedMs: Date.now() - startedAt,
-        detail: `The page is ${Math.round(html.length / 1_000_000)} MB, far past anything a small business site should be.`,
+        detail:
+          `The page serialises to ${Math.round(html.length / 1_000_000)} MB, past the ` +
+          `${MAX_HTML_BYTES / 1_000_000} MB this keeps. It loaded fine; we simply did not store it.`,
       };
     }
 

@@ -5,7 +5,7 @@ import type { scoreRunTask } from "@lead-intel/jobs/score";
 import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
-import { failJobRun, startJobRun } from "@/lib/job-runs";
+import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -60,7 +60,8 @@ export async function auditEveryWebsite(formData: FormData): Promise<void> {
   }
 
   try {
-    await tasks.trigger<typeof auditSiteRunTask>("audit-site-run", { businessIds, jobRunId });
+    const handle = await tasks.trigger<typeof auditSiteRunTask>("audit-site-run", { businessIds, jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     redirect(
@@ -120,7 +121,8 @@ export async function auditTickedWebsites(formData: FormData): Promise<void> {
   try {
     // Explicit ids, so these are re-read even if they have been audited before — which is the point
     // of ticking them. The whole-list button is the one that skips what it has already done.
-    await tasks.trigger<typeof auditSiteRunTask>("audit-site-run", { businessIds, jobRunId });
+    const handle = await tasks.trigger<typeof auditSiteRunTask>("audit-site-run", { businessIds, jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     redirect(`/records?error=${encodeURIComponent(explainEnqueueFailure(err))}`);
@@ -166,7 +168,8 @@ export async function rescoreEverything(): Promise<void> {
   }
 
   try {
-    await tasks.trigger<typeof scoreRunTask>("score-run", { jobRunId });
+    const handle = await tasks.trigger<typeof scoreRunTask>("score-run", { jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     redirect(

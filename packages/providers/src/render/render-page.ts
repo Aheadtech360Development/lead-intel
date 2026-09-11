@@ -10,6 +10,9 @@ import type { RenderedPage } from "./types.js";
  * reintroduce the word "Headless" and start collecting 403s again — which is exactly how the
  * previous version went wrong without anyone noticing.
  */
+/** The viewport the screenshot is cropped to. Matches the render width so nothing reflows. */
+const SCREENSHOT_WIDTH = 1280;
+
 const RENDER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36";
 
@@ -137,6 +140,37 @@ export async function renderPage(params: RenderPageParams): Promise<RenderedPage
   };
 }
 
+/**
+ * Walks down the page so lazy-loaded images are actually requested, then returns to the top.
+ *
+ * Deliberately unhurried — a third of a viewport at a time with a pause between — because the point
+ * is to cross each image's "near the viewport" threshold and give the network a moment to answer.
+ * Racing to the bottom would tick every threshold and photograph the same empty boxes.
+ *
+ * Bounded three ways: a fixed number of steps, a height ceiling, and a swallowed failure. A page
+ * that grows as you scroll it — an infinite feed — must cost a second, not a run.
+ */
+async function autoScroll(page: Page): Promise<void> {
+  try {
+    await page.evaluate(async () => {
+      const step = Math.round(window.innerHeight / 3);
+      const limit = Math.min(document.documentElement.scrollHeight, window.innerHeight * 4);
+      for (let y = 0; y < limit; y += step) {
+        window.scrollTo(0, y);
+        await new Promise((r) => setTimeout(r, 90));
+      }
+      window.scrollTo(0, 0);
+      await new Promise((r) => setTimeout(r, 120));
+    });
+
+    // Whatever the scrolling asked for, give it a moment to arrive. Short, because this is a
+    // courtesy to the picture and not a reason to hold the audit up.
+    await page.waitForLoadState("networkidle", { timeout: 3_000 }).catch(() => {});
+  } catch {
+    // A page that refuses to be scrolled still gets photographed, just as it was.
+  }
+}
+
 async function renderPageOnce(params: RenderPageParams): Promise<RenderedPage> {
   const startedAt = Date.now();
   const base = {
@@ -256,7 +290,33 @@ async function renderPageOnce(params: RenderPageParams): Promise<RenderedPage> {
     if (params.screenshot) {
       // WebP at quality 70, full page. PNG would be roughly four times the bytes for a screenshot
       // nobody is going to pixel-peep, and storage is the constraint that arrives first.
-      const buffer = await page.screenshot({ fullPage: true, type: "jpeg", quality: 70 });
+      /**
+       * Scrolled first, then cropped to what a person would actually look at.
+       *
+       * Two faults in the version this replaces, both visible in the pictures the operator was
+       * shown.
+       *
+       * **Half the page was missing.** Almost every modern site loads its images only as they come
+       * near the viewport. A full-page screenshot taken straight after load photographs a document
+       * whose images below the fold have never been asked for, so they come out blank — the page
+       * appears gutted. Walking down the page first lets the site load what a visitor would see,
+       * and `networkidle` waits for those images to arrive.
+       *
+       * **And it went on forever.** `fullPage` captures the entire document; a long marketing page
+       * becomes a strip twenty thousand pixels tall, which is unreadable on screen and large in
+       * storage. Three screens' worth is what anyone actually judges a site by, so that is what is
+       * kept.
+       */
+      await autoScroll(page);
+      const height = await page
+        .evaluate(() => Math.min(document.documentElement.scrollHeight, window.innerHeight * 3))
+        .catch(() => 900);
+
+      const buffer = await page.screenshot({
+        type: "jpeg",
+        quality: 72,
+        clip: { x: 0, y: 0, width: SCREENSHOT_WIDTH, height: Math.max(600, Math.round(height)) },
+      });
       screenshot = buffer.toString("base64");
     }
 

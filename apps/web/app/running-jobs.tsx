@@ -1,4 +1,5 @@
 import { elapsedWords, type JobRun } from "@/lib/job-runs";
+import { stopJobRun } from "./actions";
 import { Money } from "./ui";
 
 /**
@@ -26,7 +27,15 @@ export function RunningJobs({ jobs, autoRefresh = true }: { jobs: JobRun[]; auto
   return (
     <>
       {/* Only while something is running, and never on a screen with a form in it. */}
-      {autoRefresh ? <meta httpEquiv="refresh" content="5" /> : null}
+      {/*
+        * Once a minute, not every five seconds.
+        *
+        * Five seconds was chosen so a bar would visibly move, and it made the whole product feel
+        * broken instead: every screen reloaded under the operator's cursor, a click landed on a
+        * page that was already being replaced, and there was no calm moment to read anything. The
+        * "Refresh now" link covers the case where they want to see progress immediately.
+        */}
+      {autoRefresh ? <meta httpEquiv="refresh" content="60" /> : null}
 
       <section
         aria-live="polite"
@@ -44,19 +53,20 @@ export function RunningJobs({ jobs, autoRefresh = true }: { jobs: JobRun[]; auto
             {jobs.length === 1 ? "A task is running" : `${jobs.length} tasks are running`}
           </strong>
           <span style={{ marginLeft: "auto", fontSize: 14, color: "var(--ink-2)" }}>
-            {autoRefresh ? (
-              "This page refreshes itself every 5 seconds"
-            ) : (
-              <>
-                Not refreshing on its own here, so nothing you are typing is lost.{" "}
-                <a href="">Refresh now</a>
-              </>
-            )}
+            {autoRefresh ? "Updates itself once a minute. " : "Not updating on its own here, so nothing you type is lost. "}
+            <a href="" data-tip="Reload this page now to see how far the task has got">
+              Refresh now
+            </a>
           </span>
         </div>
 
         {jobs.map((job) => (
-          <JobLine key={job.id} job={job} />
+          <div key={job.id} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <JobLine job={job} />
+            </div>
+            <StopButton job={job} />
+          </div>
         ))}
       </section>
     </>
@@ -162,5 +172,29 @@ function Spinner() {
         }}
       />
     </>
+  );
+}
+
+/**
+ * Stops one job. Shown only while it is still going.
+ *
+ * Jobs started before run ids were recorded can still be stopped: the button marks the row, and the
+ * long loops check the row between batches. Only the platform-side cancel is skipped for those.
+ */
+export function StopButton({ job, back = "" }: { job: JobRun; back?: string }) {
+  if (job.status !== "queued" && job.status !== "running") return null;
+  return (
+    <form action={stopJobRun} style={{ marginTop: 10 }}>
+      <input type="hidden" name="jobRunId" value={job.id} />
+      <input type="hidden" name="back" value={back || "/records"} />
+      <button
+        type="submit"
+        className="btn-2 btn"
+        style={{ fontSize: 14.5, padding: "5px 11px", color: "var(--bad-ink)", borderColor: "var(--bad)" }}
+        data-tip="Stop this task. Whatever it has already read or bought is kept; nothing new starts."
+      >
+        Stop
+      </button>
+    </form>
   );
 }

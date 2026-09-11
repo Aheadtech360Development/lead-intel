@@ -24,10 +24,12 @@ export interface JobRun {
   costCents: number;
   startedAt: string;
   finishedAt: string | null;
+  /** Null for jobs started before run ids were recorded; those cannot be stopped. */
+  triggerRunId: string | null;
 }
 
 const COLUMNS =
-  "id, kind, label, status, total, done, step, detail, business_id, cost_cents, started_at, finished_at";
+  "id, kind, label, status, total, done, step, detail, business_id, cost_cents, started_at, finished_at, trigger_run_id";
 
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
@@ -56,6 +58,17 @@ export async function startJobRun(
     .single();
 
   return error ? null : (data?.id ?? null);
+}
+
+/**
+ * Remembers which Trigger.dev run is doing this job, so it can be stopped later.
+ *
+ * Best effort: a job whose run id could not be stored still runs, it just cannot be cancelled from
+ * the product — which is the state every job was in before this existed.
+ */
+export async function attachTriggerRun(supabase: Supabase, id: string | null, runId: string | undefined): Promise<void> {
+  if (!id || !runId) return;
+  await supabase.from("job_runs").update({ trigger_run_id: runId }).eq("id", id);
 }
 
 /** Marks a job finished from the web side — used when the enqueue itself fails. */
@@ -121,6 +134,7 @@ function toJobRun(row: Record<string, unknown>): JobRun {
     costCents: Number(row.cost_cents ?? 0),
     startedAt: String(row.started_at),
     finishedAt: (row.finished_at as string | null) ?? null,
+    triggerRunId: (row.trigger_run_id as string | null) ?? null,
   };
 }
 

@@ -3,6 +3,7 @@ import { logger, queue, task } from "@trigger.dev/sdk";
 import { auditSite } from "../src/audit-site.js";
 import { critiquePages } from "../src/critique-pages.js";
 import { jobProgress } from "../src/job-progress.js";
+import { scoreAndStore } from "../src/scoring.js";
 
 /**
  * The browser audit for one business's website.
@@ -68,6 +69,25 @@ export const auditSiteTask = task({
        */
       await progress.say("Asking the model what the measurements miss");
       const critique = await critiquePages(db, payload.businessId);
+
+      /**
+       * Re-scored, because the audit has just changed the facts the score is made of.
+       *
+       * Without this the operator's report was exactly right: read a website page by page, watch it
+       * find the Instagram account and prove the site works, then look at the record and see the
+       * same Problem score, the same priority and the same row colour as before. The audit was
+       * writing evidence that nothing was reading.
+       *
+       * Scoring is arithmetic over findings already stored — no crawl, no provider, no cost — so
+       * doing it here is a few milliseconds rather than another job to remember to run.
+       */
+      await progress.say("Working out the scores again");
+      const rescored = await scoreAndStore(db, payload.businessId);
+      logger.info("rescored after audit", {
+        businessId: payload.businessId,
+        tier: rescored.tier,
+        problem: rescored.problemScore,
+      });
       logger.info("pages critiqued", {
         businessId: payload.businessId,
         critiqued: critique.critiqued,
@@ -83,14 +103,15 @@ export const auditSiteTask = task({
           `Read ${summary.pagesAudited} ${summary.pagesAudited === 1 ? "page" : "pages"}, ` +
           `${summary.pagesReadable} of them fully. ` +
           `${summary.screenshotsStored > 0 ? `Kept ${summary.screenshotsStored} screenshot${summary.screenshotsStored === 1 ? "" : "s"}. ` : ""}` +
-          `${summary.statusCorrected ? "Their site works after all — a browser opened it where the plain crawler was refused. " : ""}` +
+          `${summary.statusCorrected ? "A browser opened this site where the plain crawler was refused — the pages below are real, whatever the crawl says. " : ""}` +
         `${summary.socialSaved.length > 0 ? `Found their ${summary.socialSaved.includes("instagram_handle") ? "Instagram" : ""}${summary.socialSaved.includes("instagram_handle") && summary.socialSaved.includes("facebook_url") ? " and " : ""}${summary.socialSaved.includes("facebook_url") ? "Facebook" : ""} on their site and saved it. ` : ""}` +
         `${critique.critiqued} judged by the model` +
           `${critique.costCents > 0 ? `, costing ${critique.costCents.toFixed(2)}¢ of Gemini` : ""}.` +
           // Why the model judged fewer pages than were read. Without this the line said
           // "0 judged by the model." and stopped, which is a result with its reason removed — the
           // exact shape of silent failure this whole product keeps having to fix.
-          `${critique.stopped ? ` ${critique.stopped}` : ""}` +
+          `${rescored.tier !== null ? ` Re-scored: now Priority ${rescored.tier}.` : " Re-scored."}` +
+        `${critique.stopped ? ` ${critique.stopped}` : ""}` +
           `${critique.failed > 0 && !critique.stopped ? ` ${critique.failed} could not be judged.` : ""}` +
           `${summary.screenshotProblem ? ` No screenshots kept: ${summary.screenshotProblem}` : ""}`,
       });

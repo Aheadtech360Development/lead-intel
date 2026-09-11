@@ -31,6 +31,11 @@ export interface JobProgress {
    */
   setDone(done: number, step?: string): Promise<void>;
   finish(outcome: { ok: boolean; detail: string }): Promise<void>;
+  /**
+   * True when the operator pressed Stop. Checked between batches by every long loop, so stopping
+   * does not depend on how the platform treats child runs already in flight.
+   */
+  stopped(): Promise<boolean>;
 }
 
 export function jobProgress(db: Database, jobRunId: string | null | undefined): JobProgress {
@@ -43,6 +48,9 @@ export function jobProgress(db: Database, jobRunId: string | null | undefined): 
       async say() {},
       async setDone() {},
       async finish() {},
+      async stopped() {
+        return false;
+      },
     };
   }
 
@@ -93,6 +101,15 @@ export function jobProgress(db: Database, jobRunId: string | null | undefined): 
 
     async setDone(done, step) {
       await set({ status: "running", done, ...(step === undefined ? {} : { step }) });
+    },
+
+    async stopped() {
+      try {
+        const [row] = await db.select({ status: jobRuns.status }).from(jobRuns).where(eq(jobRuns.id, jobRunId)).limit(1);
+        return row?.status === "failed";
+      } catch {
+        return false;
+      }
     },
 
     async finish({ ok, detail }) {

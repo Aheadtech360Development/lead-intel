@@ -10,6 +10,7 @@ import {
 import type { analyseRunTask } from "@lead-intel/jobs/analyse";
 import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
+import { attachTriggerRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -368,12 +369,21 @@ export async function confirmImport(formData: FormData): Promise<void> {
   // on evidence that does not exist yet, and quietly file most of them under nothing.
   let analysisStarted = false;
   if (plan.analyseWebsites || plan.applyCategories) {
+    // A job row like every other button, so the import's analysis shows in the progress bar and
+    // can be stopped. It was the one enqueue left that nobody could watch.
+    const jobRunId = await startJobRun(supabase, {
+      kind: "analyse-run",
+      label: `Reading the ${touched.length} businesses from ${batch.filename ?? "your file"}`,
+      total: plan.analyseWebsites ? touched.length : null,
+    });
     try {
-      await tasks.trigger<typeof analyseRunTask>("analyse-run", {
+      const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", {
         businessIds: plan.analyseWebsites ? touched : [],
         categoriseIds: plan.applyCategories ? touched : [],
         skipAnalysis: !plan.analyseWebsites,
+        jobRunId,
       });
+      await attachTriggerRun(supabase, jobRunId, handle.id);
       analysisStarted = true;
     } catch {
       analysisStarted = false;

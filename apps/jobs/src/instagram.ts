@@ -4,6 +4,7 @@ import { fetchInstagramProfile, isInstagramOk, isApifyFatal } from "@lead-intel/
 import { and, eq } from "drizzle-orm";
 import { upsertFieldMetadata } from "./field-metadata.js";
 import { recordProviderCall } from "./provider-calls.js";
+import { scoreAndStore } from "./scoring.js";
 
 export interface InstagramSummary {
   businessId: string;
@@ -111,6 +112,24 @@ export async function instagramBusiness(db: Database, businessId: string): Promi
     await upsertFieldMetadata(db, businessId, fields);
   } catch (err) {
     throw new Error(`failed to record Instagram for ${business.name}: ${describeDbError(err)}`);
+  }
+
+  /**
+   * Re-scored, because what was just bought is part of the score.
+   *
+   * Only the Google-listing purchase used to do this. Buying someone's Instagram — whose follower
+   * count is exactly what the demand rule reads to lift a no-website business to Priority 1 — wrote
+   * the followers onto the record and left the score, the priority and the row colour where they
+   * were. The operator's report was precise: the task ran and nothing changed. The data had
+   * changed; nothing had read it.
+   *
+   * Arithmetic over stored findings, so it costs nothing. A failure here costs the refresh, never
+   * the purchase, which is already paid for and already stored.
+   */
+  try {
+    await scoreAndStore(db, businessId);
+  } catch {
+    // The next re-score picks it up.
   }
 
   return {

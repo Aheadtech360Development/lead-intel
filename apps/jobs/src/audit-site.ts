@@ -30,7 +30,7 @@ export interface SiteAuditSummary {
   screenshotsStored: number;
   /** Social accounts found on their site and written to the record, by field name. */
   socialSaved: string[];
-  /** Set when the browser proved a site works that the plain crawler had given up on. */
+  /** Set when a browser read pages the plain crawler was refused. Does not change the verdict. */
   statusCorrected: boolean;
   /**
    * Why no picture was kept, when none was. Reported rather than swallowed: a missing screenshot
@@ -223,13 +223,13 @@ export async function auditSite(
     }
 
     const socialSaved = await saveSocialLinks(db, businessId, socialFound);
-    const statusCorrected = await confirmWebsiteWorks(db, businessId, readable);
+    const browserReadRecorded = await recordBrowserRead(db, businessId, readable);
 
     return {
       businessId,
       pagesAudited: chosen.length,
       socialSaved,
-      statusCorrected,
+      statusCorrected: browserReadRecorded,
       pagesReadable: readable,
       types,
       elapsedMs: Date.now() - startedAt,
@@ -288,50 +288,33 @@ function reclassify(page: ChosenPage, rendered: RenderedPage & { html: string })
 }
 
 /**
- * Tells the record that the site works, when the browser has just proved it does.
+ * Records that a browser got in where the plain crawler did not — **without touching the verdict**.
  *
- * The plain crawler decides `website_status`, and it is the weaker instrument: it fetches with a
- * bot user-agent and a great many sites refuse it. When that happens the business is left
- * `unclear` — "couldn't check" — and it stays there for ever, because nothing that runs afterwards
- * is allowed to revise it.
+ * The first version of this set `website_status` to `live`, and that was wrong twice over.
  *
- * That was visible on the operator's screen and made no sense: a record showing "Server answered
- * 403" and "Pages we read 0", directly above five pages of that same site read by a browser
- * minutes earlier, with screenshots. The row also stayed uncoloured, because the tinting asks
- * whether the site is `live` and the answer was still the crawler's.
+ * It broke the score. The verdict feeds the presence override in packages/core/src/scoring, which
+ * is what makes "we can barely read their site" a Priority 1 lead. Measured on a real record:
+ * Vachale Beauty Concepts went from **Priority 1, problem 90** to **unscorable** the moment the
+ * status was corrected — because the 51 checks run on the crawler's output and the crawler is still
+ * being refused, so there was nothing left to score with. A fix that quietly demotes real leads is
+ * worse than the display problem it set out to solve.
  *
- * **Only ever upgrades `unclear`.** A genuine `no_website` or a `dead` domain is a finding, not a
- * gap, and this must not paper over one. Reading pages is proof the site works; it is not proof
- * that some other verdict was wrong.
+ * And it was not even true in the sense that matters. `website_status` answers "what can we sell
+ * them", and a site our own tooling is refused by is a site whose owner has a problem worth
+ * discussing. That the page renders in Chromium is a separate, useful fact — so it is stored as a
+ * separate, useful fact, and the record shows both instead of one overwriting the other.
  */
-async function confirmWebsiteWorks(db: Database, businessId: string, pagesRead: number): Promise<boolean> {
+async function recordBrowserRead(db: Database, businessId: string, pagesRead: number): Promise<boolean> {
   if (pagesRead < 1) return false;
 
-  const [row] = await db
-    .select({ status: businesses.websiteStatus })
-    .from(businesses)
-    .where(eq(businesses.id, businessId))
-    .limit(1);
-
-  if (row?.status !== "unclear") return false;
-
-  const reason =
-    `A real browser opened ${pagesRead} ${pagesRead === 1 ? "page" : "pages"} of this site. The plain ` +
-    `crawler could not — many sites refuse an automated fetch and serve the same pages to a browser — ` +
-    `so the earlier "couldn't check" was about our crawler rather than about them.`;
-
+  const value = String(pagesRead);
   try {
-    await db
-      .update(businesses)
-      .set({ websiteStatus: "live", manualReviewStatus: false, manualReviewReasons: [], updatedAt: new Date() })
-      .where(eq(businesses.id, businessId));
-
     await db
       .insert(fieldMetadata)
       .values({
         businessId,
-        fieldName: "website_status_reason",
-        value: reason,
+        fieldName: "browser_pages_read",
+        value,
         sourceName: "own_crawl",
         verificationStatus: "verified",
         lastVerifiedAt: new Date(),
@@ -339,12 +322,10 @@ async function confirmWebsiteWorks(db: Database, businessId: string, pagesRead: 
       })
       .onConflictDoUpdate({
         target: [fieldMetadata.businessId, fieldMetadata.fieldName],
-        set: { value: reason, sourceName: "own_crawl", lastVerifiedAt: new Date(), updatedAt: new Date() },
+        set: { value, lastVerifiedAt: new Date(), updatedAt: new Date() },
       });
-
     return true;
   } catch {
-    // The audit's own findings are already stored and are the valuable part.
     return false;
   }
 }

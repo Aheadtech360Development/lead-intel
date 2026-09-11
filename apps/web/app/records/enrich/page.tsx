@@ -203,6 +203,9 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
         {businessIds.map((id) => (
           <input key={id} type="hidden" name="id" value={id} />
         ))}
+        {/* Carried so that if the purchase is refused, the operator is sent back to this same
+            screen with these same businesses, rather than to an empty one. */}
+        {only ? <input type="hidden" name="only" value={only} /> : null}
 
         {estimate.perSource.map((source) => {
           const definition = ENRICHMENT_DEFINITIONS[source.source];
@@ -215,7 +218,13 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
                   name="source"
                   value={source.source}
                   disabled={!buyable}
-                  defaultChecked={source.source === "places_details" && buyable}
+                  defaultChecked={
+                    // Ticked when it is the one thing this screen was opened for. The record's
+                    // "Analyse their Instagram" button arrives here with only=instagram_profile,
+                    // and this box used to sit empty — so pressing buy produced "you did not tick
+                    // anything", nothing was bought, and the operator saw no change at all.
+                    buyable && (only ? source.source === only : source.source === "places_details")
+                  }
                   style={{ width: 17, height: 17, marginTop: 3 }}
                 />
                 <span style={{ flex: 1 }}>

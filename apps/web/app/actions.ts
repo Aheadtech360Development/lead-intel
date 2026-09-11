@@ -1,7 +1,7 @@
 "use server";
 
+import { runs } from "@trigger.dev/sdk";
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { RAIL_COOKIE, railIsOpen } from "@/lib/rail";
 import { createClient } from "@/lib/supabase/server";
@@ -39,6 +39,58 @@ export async function toggleRail(): Promise<void> {
     sameSite: "lax",
   });
 
-  // Every screen draws the rail, so every screen is now stale.
-  revalidatePath("/", "layout");
+  /**
+   * Nothing to revalidate.
+   *
+   * This used to call `revalidatePath("/", "layout")`, which throws away the router cache for
+   * **every route in the product** — so opening the sidebar made the next click on anything slow,
+   * and the one after that. It was also unnecessary: Next re-renders the current route once a
+   * server action returns, and this render reads `cookies()`, so the new width is already applied.
+   *
+   * Other routes pick it up when they are next visited, which is exactly when they need it.
+   */
+}
+
+/**
+ * Stops a job the operator started, by mistake or otherwise.
+ *
+ * Two things happen, and the second is the one that can be relied on. The Trigger.dev run is asked
+ * to cancel; and the job's own row is marked stopped, which every long job here checks between
+ * batches and stops at. The second does not depend on how the platform treats child runs already in
+ * flight — a site already open in a browser finishes its current page, and nothing new starts.
+ *
+ * Nothing already bought or measured is undone. Stopping is "no more", never "take it back".
+ */
+export async function stopJobRun(formData: FormData): Promise<void> {
+  const id = String(formData.get("jobRunId") ?? "");
+  const back = String(formData.get("back") ?? "/records");
+  if (!id) redirect(back);
+
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (typeof data?.claims?.sub !== "string") redirect("/login");
+
+  const { data: job } = await supabase.from("job_runs").select("trigger_run_id, status").eq("id", id).maybeSingle();
+
+  if (job?.trigger_run_id) {
+    try {
+      await runs.cancel(job.trigger_run_id);
+    } catch {
+      // Already finished, or the worker is unreachable. The row below still stops the loop.
+    }
+  }
+
+  await supabase
+    .from("job_runs")
+    .update({
+      status: "failed",
+      detail: "Stopped by you. Anything already read or bought is kept; nothing new was started.",
+      step: null,
+      finished_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .in("status", ["queued", "running"]);
+
+  const sep = back.includes("?") ? "&" : "?";
+  redirect(`${back}${sep}saved=${encodeURIComponent("Stopped. Anything already done is kept.")}`);
 }

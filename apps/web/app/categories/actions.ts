@@ -16,7 +16,7 @@ import { tasks } from "@trigger.dev/sdk";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
-import { failJobRun, startJobRun } from "@/lib/job-runs";
+import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -281,7 +281,8 @@ export async function applyRules(): Promise<void> {
   }
 
   try {
-    await tasks.trigger<typeof categoriseRunTask>("categorise-run", { jobRunId });
+    const handle = await tasks.trigger<typeof categoriseRunTask>("categorise-run", { jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     redirect(

@@ -4,7 +4,7 @@ import type { analyseRunTask } from "@lead-intel/jobs/analyse";
 import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
-import { failJobRun, startJobRun } from "@/lib/job-runs";
+import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -57,7 +57,8 @@ export async function analyseUnscored(formData: FormData): Promise<void> {
     // Categorised as well as analysed, so this button leaves a business in the same state an import
     // or a search would. It reads stored text and costs nothing, and a business that has just been
     // read for the first time is exactly the one whose category was previously unknowable.
-    await tasks.trigger<typeof analyseRunTask>("analyse-run", { businessIds, categoriseAll: true, jobRunId });
+    const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", { businessIds, categoriseAll: true, jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     // Surfaced rather than swallowed. An operator who pressed "Analyse" and saw a cheerful message
@@ -116,7 +117,7 @@ export async function refreshWebsiteText(formData: FormData): Promise<void> {
   }
 
   try {
-    await tasks.trigger<typeof analyseRunTask>("analyse-run", {
+    const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", {
       businessIds: [],
       jobRunId,
       refreshMissingField: "site_text",
@@ -125,6 +126,7 @@ export async function refreshWebsiteText(formData: FormData): Promise<void> {
       // categories and concluding the crawl had not worked.
       categoriseAll: true,
     });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     redirect(
       `${back}${back.includes("?") ? "&" : "?"}error=${encodeURIComponent(

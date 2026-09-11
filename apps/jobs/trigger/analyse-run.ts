@@ -1,5 +1,6 @@
 import { businesses, createDbClient, fieldMetadata, findings } from "@lead-intel/db";
 import { logger, task } from "@trigger.dev/sdk";
+import { auditSiteTask } from "./audit-site.js";
 import { jobProgress } from "../src/job-progress.js";
 import { and, eq, notExists, sql } from "drizzle-orm";
 import { auditWebsiteTask } from "./audit-website.js";
@@ -64,6 +65,15 @@ export const analyseRunTask = task({
      * nobody rather than refusing to start.
      */
     jobRunId?: string | null;
+    /**
+     * Open these in a real browser afterwards, page by page.
+     *
+     * Last on purpose, and chained here rather than enqueued alongside. The two passes write to the
+     * same record and the browser one has the better evidence — it is what proves a site the plain
+     * crawler was refused actually works — so it has to land second or the crawler's verdict wins
+     * by arriving late.
+     */
+    thenAuditSites?: boolean;
     /** Set when the operator asked for categories but not for a crawl. */
     skipAnalysis?: boolean;
     /**
@@ -131,6 +141,8 @@ export const analyseRunTask = task({
 
       let audited = 0;
       for (let i = 0; i < toAudit.length; i += BATCH_SIZE) {
+        // The operator pressed Stop. Leave now; everything finished so far is kept.
+        if (await progress.stopped()) return { stoppedByOperator: true } as never;
         const chunk = toAudit.slice(i, i + BATCH_SIZE);
         // AndWait, unlike the other run tasks: PageSpeed below reads the website status this decides.
         await auditWebsiteTask.batchTriggerAndWait(chunk.map((id) => ({ payload: { businessId: id } })));
@@ -184,7 +196,12 @@ export const analyseRunTask = task({
         if (run.ok) categorised = run.output.categorised;
       }
 
-      logger.info("analysis finished", { audited, measured, categorised, youtube });
+      if (payload.thenAuditSites && explicit.length > 0) {
+      await progress.say(`Opening ${explicit.length === 1 ? "their site" : "the sites"} in a real browser`);
+      await auditSiteTask.batchTriggerAndWait(explicit.map((id) => ({ payload: { businessId: id } })));
+    }
+
+    logger.info("analysis finished", { audited, measured, categorised, youtube });
 
       // Always a sentence, never a blank. A finished row with no detail reads, on the operator's
       // screen, exactly like one that is still going.

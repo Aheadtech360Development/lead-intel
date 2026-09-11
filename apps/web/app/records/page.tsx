@@ -100,12 +100,15 @@ const WHOLE_LIST_JOBS: {
   buys: string;
   platform: string;
   primary?: boolean;
+  /** What pressing the button does, shown on hover. */
+  tip: string;
 }[] = [
   {
     title: "Read every website page by page",
     what:
       "Opens each business's site in a real browser, walks its pages, measures the layout, keeps a screenshot of the home and product pages, and asks the model what the measurements miss. Skips anything already read.",
     button: "Read them page by page",
+    tip: "Starts reading every website not yet read page by page. This is the whole list — it can take hours. You can stop it from the bar at the top.",
     action: auditEveryWebsite,
     cents: 0.36,
     buys: "the model's read on each page it finds",
@@ -117,6 +120,7 @@ const WHOLE_LIST_JOBS: {
     what:
       "Works the two scores and the priorities out again from the checks already stored. No website is read again and no provider is called - it is arithmetic over what is already here.",
     button: "Re-score everything",
+    tip: "Works out every business's score and priority again from what is already stored. Free, and takes a few minutes.",
     action: rescoreEverything,
     cents: 0,
     buys: "nothing - it only re-reads what is already stored",
@@ -224,7 +228,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
   // The whole active set, once. A few hundred rows is small enough that filtering and counting in
   // memory is simpler and cheaper than a round-trip per filter, and it keeps every count in the
   // sidebar guaranteed consistent with the rows beside it.
-  const { data: all, error } = await supabase
+  // In the batch below rather than before it. On its own it was a sequential round trip — about
+  // 60ms to Supabase — bought for nothing, since it does not depend on any of them.
+  const businessesQuery = supabase
     .from("businesses")
     .select(
       "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, category, subcategory, category_rule_id, scored_at",
@@ -233,7 +239,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     .order("tier", { ascending: true, nullsFirst: false })
     .order("problem_score", { ascending: false, nullsFirst: false });
 
-  const [{ data: contactRows }, { data: spendRows }, { data: batchRows }, social] = await Promise.all([
+  const [{ data: all, error }, { data: contactRows }, { data: spendTotal }, { data: batchRows }, social] =
+    await Promise.all([
+    businessesQuery,
     supabase
       .from("field_metadata")
       .select("business_id, field_name")
@@ -242,7 +250,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
       // truncation as an ordinary success. Two fields per business crosses that at roughly 500
       // businesses, which is inside the range this list is built for.
       .limit(20000),
-    supabase.from("provider_calls").select("cost_cents").limit(20000),
+    // A sum, not 315 rows fetched and added up in JavaScript. The database was always going to be
+    // better at this, and the row count only grows.
+    supabase.from("provider_calls").select("total:cost_cents.sum()").single(),
     supabase.from("import_batches").select("id, filename").eq("status", "imported"),
     // Instagram, ads and review counts — the columns, two of the filters, and the row tinting. The
     // same loader the buy screen uses, so neither can be looking at a different set of facts.
@@ -258,8 +268,8 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     if (row.field_name === "contact_phone_web") existing.phone = true;
     contactable.set(row.business_id, existing);
   }
-  // numeric arrives as a string from PostgREST; `+` on it concatenates.
-  const spentCents = (spendRows ?? []).reduce((sum, r) => sum + Number(r.cost_cents ?? 0), 0);
+  // numeric arrives as a string from PostgREST; Number() rather than `+`, which would concatenate.
+  const spentCents = Number((spendTotal as { total?: number | string } | null)?.total ?? 0);
 
   const rows = all ?? [];
 
@@ -461,7 +471,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                 </div>
                 <div style={{ marginTop: "auto", display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
                   <form action={job.action}>
-                    <button className={job.primary ? "btn" : "btn-2 btn"} type="submit">
+                    <button className={job.primary ? "btn" : "btn-2 btn"} type="submit" data-tip={job.tip}>
                       {job.button}
                     </button>
                   </form>
@@ -753,7 +763,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                     style={{ flex: "1 1 320px", maxWidth: 520 }}
                     aria-label="Search businesses"
                   />
-                  <button className="btn" type="submit" form="lead-search">
+                  <button className="btn" type="submit" form="lead-search" data-tip="Find businesses whose name, town or category contains what you typed. Your other filters stay on.">
                     Search
                   </button>
                   {current.q ? (
@@ -857,11 +867,17 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                         type="submit"
                         formAction={getPaidDataForFiltered}
                         style={{ padding: "6px 12px", fontSize: 15 }}
+                        data-tip="Opens a confirm screen that prices extra data for every business the filters are showing. Nothing is bought until you confirm there."
                       >
                         Get paid data for all {shown.length}
                       </button>
                     )}
-                    <button className="btn" type="submit" style={{ padding: "6px 12px", fontSize: 15 }}>
+                    <button
+                      className="btn tip-right"
+                      type="submit"
+                      style={{ padding: "6px 12px", fontSize: 15 }}
+                      data-tip="Opens a confirm screen that prices extra data for the rows you ticked. Nothing is bought until you confirm there."
+                    >
                       Get paid data for ticked
                     </button>
 
@@ -878,10 +894,11 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                       * the top button quotes.
                       */}
                     <button
-                      className="btn-2 btn"
                       type="submit"
                       formAction={auditTickedWebsites}
                       style={{ padding: "6px 12px", fontSize: 15 }}
+                      className="btn-2 btn tip-right"
+                      data-tip="Opens the ticked businesses' websites in a real browser, keeps screenshots, finds social links and re-scores them. About 0.36¢ a site."
                     >
                       Read ticked page by page
                     </button>

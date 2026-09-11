@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import type { discoveryTask } from "@lead-intel/jobs/discovery";
 import { tasks } from "@trigger.dev/sdk";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
-import { failJobRun, startJobRun } from "@/lib/job-runs";
+import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -75,7 +75,8 @@ export async function createRun(formData: FormData): Promise<void> {
   }
 
   try {
-    await tasks.trigger<typeof discoveryTask>("discovery", { runId: run.id, jobRunId });
+    const handle = await tasks.trigger<typeof discoveryTask>("discovery", { runId: run.id, jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     // Record why enqueueing failed instead of swallowing it. An earlier version caught this
     // silently on the reasoning that "Trigger.dev may not be configured yet" — which left a run

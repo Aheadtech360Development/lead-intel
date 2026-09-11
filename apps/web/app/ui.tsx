@@ -963,6 +963,14 @@ export function FilterOption({
   return (
     <Link
       href={href}
+      className="tip-left"
+      // What pressing it does, in words. The option's own label says what it *is*; this says what
+      // happens — and that clicking it again takes it off, which nothing on screen said before.
+      data-tip={
+        active
+          ? `Showing only “${label}”. Click again to remove this filter.`
+          : `Show only businesses that are “${label}”${count !== undefined ? ` — ${count} of them` : ""}. Combines with any other filters you have on.`
+      }
       style={{
         display: "flex",
         alignItems: "baseline",

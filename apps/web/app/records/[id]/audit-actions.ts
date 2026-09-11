@@ -1,10 +1,11 @@
 "use server";
 
+import type { analyseRunTask } from "@lead-intel/jobs/analyse";
 import type { auditSiteTask } from "@lead-intel/jobs/audit-site";
 import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
-import { failJobRun, startJobRun } from "@/lib/job-runs";
+import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -57,7 +58,8 @@ export async function auditWebsite(formData: FormData): Promise<void> {
   }
 
   try {
-    await tasks.trigger<typeof auditSiteTask>("audit-site", { businessId, jobRunId });
+    const handle = await tasks.trigger<typeof auditSiteTask>("audit-site", { businessId, jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     // Surfaced, not swallowed. An operator who pressed the button and saw a cheerful message while
@@ -73,6 +75,72 @@ export async function auditWebsite(formData: FormData): Promise<void> {
     `/records/${businessId}?saved=${encodeURIComponent(
       "Reading their website now, page by page — usually under a minute. Refresh to see the scorecards. " +
         "It costs machine time on Trigger.dev and nothing to any provider.",
+    )}`,
+  );
+}
+
+/**
+ * Everything, on one business, in the right order.
+ *
+ * The operator asked for a single button that gets them the whole picture of a lead rather than
+ * having to know which of three passes to run. It chains rather than fans out, because the two
+ * passes write to the same record and their evidence is not of equal weight: the plain crawl
+ * decides `website_status`, the browser can overturn a "couldn't check", and whichever lands last
+ * wins. Running them side by side would make the result depend on which finished first.
+ *
+ * **What it costs.** The crawl, the checks, the speed test and the scoring are free — our own code
+ * and Google's free PageSpeed API. Only the page judgements cost anything: about **0.36¢** with
+ * **Google AI Studio (Gemini)**, plus browser time on **Trigger.dev**, which runs every background
+ * job here. Nothing is bought from any data provider; buying is always a separate, confirmed step.
+ */
+export async function fullAnalyse(formData: FormData): Promise<void> {
+  const businessId = String(formData.get("id") ?? "").trim();
+  if (!businessId) redirect("/records");
+
+  const supabase = await createClient();
+  const { data: claimsData } = await supabase.auth.getClaims();
+  if (typeof claimsData?.claims?.sub !== "string") {
+    redirect(`/records/${businessId}?error=${encodeURIComponent("You are not signed in.")}`);
+  }
+
+  const { data: business } = await supabase
+    .from("businesses")
+    .select("display_name")
+    .eq("id", businessId)
+    .maybeSingle();
+
+  const jobRunId = await startJobRun(supabase, {
+    kind: "analyse-run",
+    label: `Full analysis of ${business?.display_name ?? "this business"}`,
+    businessId,
+  });
+
+  const blocked = enqueueBlockedBecause();
+  if (blocked.blocked) {
+    await failJobRun(supabase, jobRunId, blocked.why);
+    redirect(`/records/${businessId}?error=${encodeURIComponent(blocked.why)}`);
+  }
+
+  try {
+    const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", {
+      businessIds: [businessId],
+      categoriseAll: false,
+      categoriseIds: [businessId],
+      // The browser pass last. See the note on thenAuditSites in the task.
+      thenAuditSites: true,
+      jobRunId,
+    });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
+  } catch (err) {
+    await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
+    redirect(`/records/${businessId}?error=${encodeURIComponent(explainEnqueueFailure(err))}`);
+  }
+
+  redirect(
+    `/records/${businessId}?saved=${encodeURIComponent(
+      "Running the full analysis: reading their site, checking it against all 51 rules, opening it in a " +
+        "real browser page by page, then scoring it again. A couple of minutes. The bar at the top shows " +
+        "how far along it is.",
     )}`,
   );
 }

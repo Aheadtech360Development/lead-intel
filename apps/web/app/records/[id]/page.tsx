@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { loadJobsForBusiness } from "@/lib/job-runs";
 import { loadScorecards } from "@/lib/page-scorecards";
-import { auditWebsite } from "./audit-actions";
+import { auditWebsite, fullAnalyse } from "./audit-actions";
 import { analyseUnscored } from "../analyse-actions";
 import { createClient } from "@/lib/supabase/server";
 import { explainBusiness } from "./explain-actions";
@@ -21,7 +21,6 @@ import {
   Note,
   PANEL,
   Panel,
-  Price,
   ROUTE_LABELS,
   Stars,
   TD,
@@ -196,6 +195,10 @@ export default async function RecordDetailPage({
     httpStatus: fieldValue("http_status"),
     finalUrl: fieldValue("final_url"),
     webPhone: fieldValue("contact_phone_web"),
+    // How many pages a real browser managed, which is often more than the plain crawler got. The
+    // two are shown side by side rather than one overwriting the other — see recordBrowserRead in
+    // apps/jobs/src/audit-site.ts for why the crawler's verdict is left alone.
+    browserPages: fieldValue("browser_pages_read"),
   };
 
   // Every job this business has been through, so "did that audit actually run?" is answered here
@@ -349,22 +352,96 @@ export default async function RecordDetailPage({
                 </span>
               </div>
             </div>
-            <div style={{ marginLeft: "auto", textAlign: "right" }}>
-              {business.claim_status === "unclaimed" ? (
-                <form action={claimBusiness.bind(null, business.id)}>
-                  <button className="btn" type="submit">
-                    Claim this lead
+            {/*
+              * Claim, and everything that can be run on this business, together at the top.
+              *
+              * These were a panel of their own further down the record. The operator asked for them
+              * up here beside Claim, which is right: this is the row you act from, and an action you
+              * have to scroll to find is one you forget exists.
+              *
+              * "Full analysis" first and filled in, because it is the answer to "show me everything
+              * about this one" — the question anyone opening a record is actually asking. The
+              * individual passes stay, for when only one of them is wanted.
+              */}
+            <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", gap: 9, alignItems: "flex-end" }}>
+              <div style={{ display: "flex", gap: 9, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <form action={fullAnalyse}>
+                  <input type="hidden" name="id" value={id} />
+                  <button
+                    className="btn tip-right"
+                    type="submit"
+                    disabled={!websiteUrl}
+                    data-tip="Reads their website, runs all 51 checks, opens it in a real browser page by page, then scores it again. A couple of minutes, about 0.36¢."
+                  >
+                    Full analysis of this business
                   </button>
                 </form>
-              ) : isMine ? (
-                <form action={releaseClaim.bind(null, business.id)}>
-                  <button className="btn-2 btn" type="submit">
-                    Release
+
+                {business.claim_status === "unclaimed" ? (
+                  <form action={claimBusiness.bind(null, business.id)}>
+                    <button className="btn-2 btn" type="submit">
+                      Claim this lead
+                    </button>
+                  </form>
+                ) : isMine ? (
+                  <form action={releaseClaim.bind(null, business.id)}>
+                    <button className="btn-2 btn" type="submit">
+                      Release
+                    </button>
+                  </form>
+                ) : (
+                  <span style={{ fontSize: 16, color: "var(--ink-2)", alignSelf: "center" }}>
+                    Claimed by someone else
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", gap: 9, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                <form action={analyseUnscored}>
+                  <input type="hidden" name="id" value={id} />
+                  <input type="hidden" name="back" value={`/records/${id}`} />
+                  <button
+                    className="btn-2 btn tip-right"
+                    type="submit"
+                    style={{ fontSize: 15, padding: "7px 12px" }}
+                    data-tip="Fetches their pages again and re-runs the 51 checks and the score. Free. Sites that block robots will block this too — use Read page by page for those."
+                  >
+                    Re-read &amp; re-score
                   </button>
                 </form>
-              ) : (
-                <span style={{ fontSize: 15.5, color: "var(--ink-3)" }}>Claimed by someone else</span>
-              )}
+
+                <form action={auditWebsite}>
+                  <input type="hidden" name="id" value={id} />
+                  <button
+                    className="btn-2 btn tip-right"
+                    type="submit"
+                    disabled={!websiteUrl}
+                    style={{ fontSize: 15, padding: "7px 12px" }}
+                    data-tip="Opens their site in a real browser, keeps screenshots of the home and product pages, finds their social links, and re-scores. About 0.36¢."
+                  >
+                    Read page by page
+                  </button>
+                </form>
+
+                {/*
+                  * Instagram is bought, not read, so this is a link to the confirm screen rather
+                  * than a button that spends. `only=` narrows that screen to this one source, so an
+                  * operator who came here for a follower count is not offered four other purchases.
+                  */}
+                <Link
+                  href={`/records/enrich?id=${id}&only=instagram_profile`}
+                  data-tip="Opens a confirm screen for their Instagram followers, posts and category. 0.26¢ with Apify, only after you confirm. Needs an Instagram account on the record."
+                  className="btn-2 btn tip-right"
+                  style={{ fontSize: 15, padding: "7px 12px" }}
+                >
+                  {instagram.followers ? "Refresh their Instagram" : "Analyse their Instagram"}
+                </Link>
+              </div>
+
+              <div style={{ fontSize: 14, color: "var(--ink-2)", textAlign: "right", maxWidth: 360, lineHeight: 1.45 }}>
+                Everything here is free except the Instagram lookup (0.26&#162; with Apify) and the model&rsquo;s
+                read on each page (0.36&#162; a site with Gemini).
+              </div>
             </div>
           </div>
           {business.manual_review_status && (
@@ -384,73 +461,6 @@ export default async function RecordDetailPage({
           )}
         </div>
 
-        {/*
-          * Everything that can be run on this one business, in one place.
-          *
-          * The whole-list versions of these live on the leads screen, which is the wrong place when
-          * the operator is looking at a single record and wants that record fixed. Both are scoped
-          * to this business alone.
-          */}
-        <Panel
-          title="Run something on this business"
-          hint="Both of these work on this business only, not the whole list."
-          tone="brand"
-        >
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 1, background: "var(--rule)" }}>
-            <div style={{ background: "var(--surface)", padding: "16px 18px" }}>
-              <div style={{ fontSize: 16.5, fontWeight: 750 }}>Re-read their website and re-score</div>
-              <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55, margin: "5px 0 11px" }}>
-                Fetches their pages again, runs all 51 checks, and works the scores out afresh. This is
-                the quick one &mdash; it uses a plain fetch, so a site that blocks robots will block it
-                again.
-              </div>
-              <form action={analyseUnscored} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                <input type="hidden" name="id" value={id} />
-                <input type="hidden" name="back" value={`/records/${id}`} />
-                <button className="btn-2 btn" type="submit">
-                  Re-read and re-score
-                </button>
-                <Price cents={0} free what="reading their pages and scoring them" platform="our own crawler, on Trigger.dev" />
-              </form>
-            </div>
-
-            <div style={{ background: "var(--surface)", padding: "16px 18px" }}>
-              <div style={{ fontSize: 16.5, fontWeight: 750 }}>Open it in a real browser, page by page</div>
-              <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55, margin: "5px 0 11px" }}>
-                Walks their pages in Chromium, measures the layout, keeps a screenshot of the home and
-                product pages, and asks the model what the measurements miss.{" "}
-                <strong>
-                  It also reads the links in their footer, so this is what finds an Instagram account on
-                  a site the plain crawler cannot open.
-                </strong>
-              </div>
-              <form action={auditWebsite} style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                <input type="hidden" name="id" value={id} />
-                <button className="btn" type="submit" disabled={!websiteUrl}>
-                  {scorecards.length > 0 ? "Read it again, page by page" : "Read it page by page"}
-                </button>
-                <Price
-                  cents={0.36}
-                  what="the model's read on each page"
-                  platform="Google AI Studio (Gemini), plus browser time on Trigger.dev"
-                />
-              </form>
-              {!websiteUrl ? (
-                <div style={{ fontSize: 14.5, color: "var(--ink-2)", marginTop: 8 }}>
-                  There is no web address on this record, so there is nothing to open.
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </Panel>
-
-        {/*
-          * Anything this business is currently going through.
-          *
-          * The banner in the shell shows the whole queue; this shows only this business's own jobs,
-          * finished ones included, so "did that audit actually run?" is answered on the page where
-          * the question is asked rather than by navigating away and hoping.
-          */}
         {businessJobs.length > 0 &&
           (() => {
             const live = businessJobs.filter((j) => j.status === "running" || j.status === "queued");
@@ -547,7 +557,25 @@ export default async function RecordDetailPage({
               from={WEBSITE_LABELS[business.website_status] ?? business.website_status}
             />
             <Fact label="What the site calls itself" value={site.title} missing="No title tag" from="their home page" />
-            <Fact label="Pages we read" value={site.pagesRead} missing="None read" from={site.crawlOutcome ?? "not crawled"} />
+            <Fact
+              label="Pages the crawler read"
+              value={site.pagesRead}
+              missing="None read"
+              from={site.crawlOutcome ?? "not crawled"}
+            />
+            {/*
+              * Shown only when a browser did better, which is the case worth explaining. A record
+              * that says "403, 0 pages" directly above five pages of that same site with screenshots
+              * is a record contradicting itself, and the operator read it exactly that way.
+              */}
+            {site.browserPages ? (
+              <Fact
+                label="Pages a browser read"
+                value={site.browserPages}
+                from="the page-by-page audit got in where the crawler was refused"
+                tone="good"
+              />
+            ) : null}
             <Fact
               label="Speed on a phone"
               value={perfScore ? `${perfScore} / 100` : null}

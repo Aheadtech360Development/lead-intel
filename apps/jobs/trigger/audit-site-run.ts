@@ -21,7 +21,7 @@ import { auditSiteTask } from "./audit-site.js";
  * and the queue behind `audit-site` already limits how many do that at once; chunking here only
  * keeps progress visible while it happens.
  */
-const BATCH_SIZE = 25;
+const BATCH_SIZE = 8;
 
 export const auditSiteRunTask = task({
   id: "audit-site-run",
@@ -50,7 +50,9 @@ export const auditSiteRunTask = task({
 
       let audited = 0;
       for (let i = 0; i < targets.length; i += BATCH_SIZE) {
-        const chunk = targets.slice(i, i + BATCH_SIZE);
+        // The operator pressed Stop. Leave now; everything finished so far is kept.
+      if (await progress.stopped()) return { stoppedByOperator: true } as never;
+      const chunk = targets.slice(i, i + BATCH_SIZE);
 
         // AndWait so the count on screen is honest: without it this task would finish in a second
         // and report "done" while several hundred browsers were still opening.

@@ -754,6 +754,14 @@ export const jobRuns = pgTable("job_runs", {
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   createdBy: uuid("created_by"),
+  /**
+   * The Trigger.dev run doing this job, so it can be cancelled from the product.
+   *
+   * Added to the database by migration 0019 and, at first, not here — so anything writing it
+   * through Drizzle produced an UPDATE with nothing to set and Postgres rejected it outright. The
+   * web app writes it through PostgREST and never noticed; the first Drizzle write did.
+   */
+  triggerRunId: text("trigger_run_id"),
 });
 
 export const pageChecklists = pgTable("page_checklists", {

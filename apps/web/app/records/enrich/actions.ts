@@ -10,7 +10,7 @@ import type { enrichRunTask } from "@lead-intel/jobs/enrich";
 import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
-import { failJobRun, startJobRun } from "@/lib/job-runs";
+import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -40,18 +40,34 @@ export async function buyEnrichment(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   if (typeof claimsData?.claims?.sub !== "string") {
-    redirect(`/records/enrich?error=${encodeURIComponent("You are not signed in.")}`);
+    redirect(`/login`);
   }
 
   const businessIds = formData.getAll("id").map(String).filter(Boolean);
   const sources = formData.getAll("source").map(String).filter(isEnrichmentSource);
 
+  /**
+   * Where a refusal sends the operator: back to this screen, with these businesses still on it.
+   *
+   * Every refusal here used to redirect to a bare /records/enrich?error=…, which drops the ids —
+   * so the screen rendered "Nothing selected", the message sat above an empty page, and the
+   * operator reasonably concluded something had run. That is how "I pressed Instagram and nothing
+   * changed" happened with no job ever reaching the worker.
+   */
+  const back = (message: string) => {
+    const q = new URLSearchParams();
+    for (const id of businessIds) q.append("id", id);
+    const only = String(formData.get("only") ?? "");
+    if (only) q.set("only", only);
+    q.set("error", message);
+    return `/records/enrich?${q.toString()}`;
+  };
+
   if (businessIds.length === 0) {
-    redirect(`/records/enrich?error=${encodeURIComponent("No businesses were selected, so nothing was bought.")}`);
+    redirect(back("No businesses were selected, so nothing was bought."));
   }
   if (sources.length === 0) {
-    redirect(
-      `/records/enrich?error=${encodeURIComponent("You did not tick anything to buy, so nothing was spent.")}`,
+    redirect(back("You did not tick anything to buy, so nothing was spent."),
     );
   }
 
@@ -64,12 +80,10 @@ export async function buyEnrichment(formData: FormData): Promise<void> {
   const overreach = sources.filter((s) => HAND_PICKED_MAX[s] !== undefined && businessIds.length > HAND_PICKED_MAX[s]!);
   if (overreach.length > 0) {
     const source = overreach[0]!;
-    redirect(
-      `/records/enrich?error=${encodeURIComponent(
-        `${ENRICHMENT_DEFINITIONS[source].label} is bought business by business, not for a whole list. ` +
+    redirect(back(`${ENRICHMENT_DEFINITIONS[source].label} is bought business by business, not for a whole list. ` +
           `You selected ${businessIds.length}; the most it will do at once is ${HAND_PICKED_MAX[source]}. ` +
           `Nothing was spent — tick the specific businesses you want it for and try again.`,
-      )}`,
+      ),
     );
   }
 
@@ -94,19 +108,35 @@ export async function buyEnrichment(formData: FormData): Promise<void> {
   const blocked = enqueueBlockedBecause();
   if (blocked.blocked) {
     await failJobRun(supabase, jobRunId, blocked.why);
-    redirect(`/records/enrich?error=${encodeURIComponent(blocked.why)}`);
+    redirect(back(blocked.why));
   }
 
   try {
-    await tasks.trigger<typeof enrichRunTask>("enrich-run", { businessIds, sources, capCents, jobRunId });
+    const handle = await tasks.trigger<typeof enrichRunTask>("enrich-run", { businessIds, sources, capCents, jobRunId });
+    await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     // Surfaced, not swallowed. An operator who pressed "buy" and saw a success page while nothing
     // ran would go looking for data that was never fetched — the same reasoning that made the
     // discovery flow record its own enqueue failures rather than hiding them.
+    redirect(back(explainEnqueueFailure(err),
+      ),
+    );
+  }
+
+  /**
+   * Back to where the purchase was about.
+   *
+   * One business — almost always the record's own "Analyse their Instagram" button — goes back to
+   * that record, where the new numbers will actually appear. It used to land on the leads list,
+   * so the operator bought something for one business and was then shown four hundred others,
+   * none of them visibly different.
+   */
+  if (businessIds.length === 1) {
     redirect(
-      `/records/enrich?error=${encodeURIComponent(
-        explainEnqueueFailure(err),
+      `/records/${businessIds[0]}?saved=${encodeURIComponent(
+        "Buying it now — usually under a minute. The bar at the top shows when it is done; the new numbers, " +
+          "score and row colour appear here once it finishes.",
       )}`,
     );
   }

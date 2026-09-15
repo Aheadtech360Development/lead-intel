@@ -1,69 +1,89 @@
-import { matchCategory, type CategoryEvidence, type CategoryRule } from "@lead-intel/core";
-import { businesses, categoryRules, fieldMetadata, identityKeys, type Database } from "@lead-intel/db";
+import { matchIcp, type Icp, type IcpEvidence } from "@lead-intel/core";
+import { businesses, icps, fieldMetadata, identityKeys, type Database } from "@lead-intel/db";
 import { and, eq, inArray } from "drizzle-orm";
 
-export interface CategoriseSummary {
-  categorised: number;
+export interface IcpMatchSummary {
+  matched: number;
   cleared: number;
   unmatched: number;
 }
 
 /**
- * Applies the operator's category rules to every active business.
+ * Works out which of the operator's ICPs each active business is.
  *
- * Free and re-runnable: it reads text already stored and writes a category, so changing a rule and
+ * Free and re-runnable: it reads facts already stored and writes a name, so changing an ICP and
  * running this again is the whole edit-and-see loop. No crawl, no provider, no cost.
  *
- * A business that no longer matches any rule has its category **cleared**, not left behind. A
- * stale category is worse than none: it looks like a decision somebody made rather than the
- * residue of a rule that has since been rewritten.
+ * A business that no longer matches any ICP has its ICP **cleared**, not left behind. A stale
+ * answer is worse than none: it looks like a decision somebody made rather than the residue of an
+ * ICP that has since been rewritten.
  */
-export async function categoriseAll(db: Database, onlyIds?: string[]): Promise<CategoriseSummary> {
+export async function matchAllIcps(db: Database, onlyIds?: string[]): Promise<IcpMatchSummary> {
   const rules = await loadRules(db);
   // Scoped when an import asks for its own rows and whole-list otherwise. An import that
-  // re-categorised everything would be doing work the operator did not ask a file to do, and
+  // re-matched everything would be doing work the operator did not ask a file to do, and
   // would make the counts on the batch page describe the wrong set of businesses.
   const scope =
     onlyIds && onlyIds.length > 0
       ? and(eq(businesses.status, "active"), inArray(businesses.id, onlyIds))
       : eq(businesses.status, "active");
 
-  const rows = await db.select({ id: businesses.id, name: businesses.displayName }).from(businesses).where(scope);
+  const rows = await db
+    .select({
+      id: businesses.id,
+      name: businesses.displayName,
+      // Read here rather than in gatherEvidence: these three are columns on the business itself,
+      // and an ICP's conditions ask about them directly.
+      websiteStatus: businesses.websiteStatus,
+      city: businesses.city,
+      state: businesses.state,
+    })
+    .from(businesses)
+    .where(scope);
 
-  if (rows.length === 0) return { categorised: 0, cleared: 0, unmatched: 0 };
+  if (rows.length === 0) return { matched: 0, cleared: 0, unmatched: 0 };
 
   const ids = rows.map((r) => r.id);
   const evidence = await gatherEvidence(db, ids);
 
-  let categorised = 0;
+  let matched = 0;
   let cleared = 0;
   let unmatched = 0;
 
   for (const row of rows) {
-    const facts: CategoryEvidence = { businessName: row.name, ...(evidence.get(row.id) ?? {}) };
-    const match = matchCategory(rules, facts);
+    const facts: IcpEvidence = {
+      businessName: row.name,
+      // "live" is the only status that means a site was actually reached and read. "unclear" is
+      // the third answer — nobody knows — so an ICP that requires a website declines it rather
+      // than guessing, which is what `hasWebsite: null` says.
+      hasWebsite:
+        row.websiteStatus === "live"
+          ? true
+          : row.websiteStatus === "unclear"
+            ? null
+            : false,
+      city: row.city,
+      state: row.state,
+      ...(evidence.get(row.id) ?? {}),
+    };
+    const match = matchIcp(rules, facts);
 
     if (match) {
       await db
         .update(businesses)
-        .set({
-          category: match.category,
-          subcategory: match.subcategory,
-          categoryRuleId: match.rule.id,
-          categorisedAt: new Date(),
-        })
+        .set({ icpName: match.name, icpId: match.icp.id, icpMatchedAt: new Date() })
         .where(eq(businesses.id, row.id));
-      categorised += 1;
+      matched += 1;
     } else {
       const [existing] = await db
-        .select({ category: businesses.category })
+        .select({ icpName: businesses.icpName })
         .from(businesses)
         .where(eq(businesses.id, row.id))
         .limit(1);
-      if (existing?.category) {
+      if (existing?.icpName) {
         await db
           .update(businesses)
-          .set({ category: null, subcategory: null, categoryRuleId: null, categorisedAt: new Date() })
+          .set({ icpName: null, icpId: null, icpMatchedAt: new Date() })
           .where(eq(businesses.id, row.id));
         cleared += 1;
       }
@@ -71,16 +91,15 @@ export async function categoriseAll(db: Database, onlyIds?: string[]): Promise<C
     }
   }
 
-  return { categorised, cleared, unmatched };
+  return { matched, cleared, unmatched };
 }
 
-export async function loadRules(db: Database): Promise<CategoryRule[]> {
-  const rows = await db.select().from(categoryRules);
+export async function loadRules(db: Database): Promise<Icp[]> {
+  const rows = await db.select().from(icps);
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
-    category: r.category,
-    subcategory: r.subcategory,
+    industry: r.industry,
     priority: r.priority,
     enabled: r.enabled,
     sources: r.sources ?? [],
@@ -91,6 +110,10 @@ export async function loadRules(db: Database): Promise<CategoryRule[]> {
     requireAll: r.requireAll,
     minFollowers: r.minFollowers,
     maxFollowers: r.maxFollowers,
+    searchTerms: r.searchTerms ?? [],
+    requiresWebsite: r.requiresWebsite,
+    minReviews: r.minReviews,
+    places: r.places ?? [],
   }));
 }
 
@@ -101,8 +124,16 @@ export async function loadRules(db: Database): Promise<CategoryRule[]> {
  * the operator will run every time they edit a rule — a round trip inside it would make the edit
  * loop slow enough that they stop using it.
  */
-async function gatherEvidence(db: Database, ids: string[]): Promise<Map<string, CategoryEvidence>> {
-  const WANTED = ["site_text", "instagram_bio", "instagram_category", "instagram_handle", "instagram_followers", "meta_ads_sample"];
+export async function gatherEvidence(db: Database, ids: string[]): Promise<Map<string, IcpEvidence>> {
+  const WANTED = [
+    "site_text",
+    "instagram_bio",
+    "instagram_category",
+    "instagram_handle",
+    "instagram_followers",
+    "meta_ads_sample",
+    "review_count",
+  ];
 
   const [fields, domains] = await Promise.all([
     db
@@ -115,11 +146,11 @@ async function gatherEvidence(db: Database, ids: string[]): Promise<Map<string, 
       .where(and(inArray(identityKeys.businessId, ids), eq(identityKeys.keyType, "domain"))),
   ]);
 
-  const out = new Map<string, CategoryEvidence>();
-  const at = (id: string): CategoryEvidence => {
+  const out = new Map<string, IcpEvidence>();
+  const at = (id: string): IcpEvidence => {
     const existing = out.get(id);
     if (existing) return existing;
-    const fresh: CategoryEvidence = {};
+    const fresh: IcpEvidence = {};
     out.set(id, fresh);
     return fresh;
   };
@@ -145,6 +176,13 @@ async function gatherEvidence(db: Database, ids: string[]): Promise<Map<string, 
       case "meta_ads_sample":
         target.metaAdsText = row.value;
         break;
+      case "review_count": {
+        // Same rule as followers: unparseable stays unknown rather than becoming 0, which a
+        // "20+ reviews" condition would otherwise read as a business with no reviews.
+        const n = Number(row.value);
+        target.reviewCount = Number.isFinite(n) ? n : null;
+        break;
+      }
       case "instagram_followers": {
         // Stored as text like every other field. A value that will not parse is left as unknown
         // rather than coerced to 0, which a follower gate would then read as "has no followers".

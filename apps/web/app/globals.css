@@ -165,11 +165,16 @@ textarea {
   background: var(--brand);
   color: #fff;
   text-decoration: none;
-  transition: filter 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
+/* A colour change, not `filter: brightness()`. A filter on an element turns it into the containing
+   block for any fixed-position child — so every hover message on a button was trapped inside the
+   button's own scrolling parent and cut off, which is exactly the fault the messages were moved to
+   fixed positioning to escape. */
 .btn:hover {
-  filter: brightness(1.08);
+  background: var(--brand-ink);
+  border-color: var(--brand-ink);
 }
 
 .btn-2 {
@@ -180,7 +185,7 @@ textarea {
 
 .btn-2:hover {
   background: var(--surface-3);
-  filter: none;
+  border-color: var(--rule-2);
 }
 
 .btn-quiet {
@@ -191,7 +196,7 @@ textarea {
 
 .btn-quiet:hover {
   background: var(--surface-3);
-  filter: none;
+  border-color: transparent;
 }
 
 /* ---------------------------------------------------------------- forms */
@@ -515,11 +520,17 @@ textarea {
    Every button and filter says what pressing it does, in a message that eases in on hover.
 
    CSS only, because this application ships no client-side JavaScript: the text lives in a
-   `data-tip` attribute and is drawn by a pseudo-element. The browser's own `title` tooltip was the
-   alternative, and it fails at the one job — it appears after a second's delay, in tiny system
-   type, and not at all on keyboard focus.
+   `data-tip` attribute and is drawn by a pseudo-element.
 
-   Shown on focus as well as hover, so tabbing through the controls explains them too. */
+   **Fixed, not absolute — and that is the whole fix.** The first version positioned the message
+   absolutely, and it was cut in half everywhere it mattered: the filter sidebar and the leads table
+   both scroll, and a scrolling container clips anything that pokes out of it. The operator saw half
+   a sentence and reported it as unreadable, which it was.
+
+   A `position: fixed` box with no offsets stays where it would naturally sit, but is laid out
+   against the window rather than its scrolling parent, so nothing clips it. It is then lifted above
+   its element with a transform, which needs no knowledge of how tall the element is. Shown above
+   rather than below because below is where the next row of filters, or the table, already is. */
 
 [data-tip] {
   position: relative;
@@ -527,65 +538,404 @@ textarea {
 
 [data-tip]::after {
   content: attr(data-tip);
-  position: absolute;
-  left: 50%;
-  top: calc(100% + 8px);
-  z-index: 50;
+  position: fixed;
+  z-index: 1000;
   width: max-content;
-  max-width: 280px;
-  padding: 8px 11px;
-  border-radius: 8px;
-  background: var(--ink);
-  color: #fff;
-  font-size: 13.5px;
+  max-width: 300px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: #0a1020;
+  border: 1px solid #2c3650;
+  color: #ffffff;
+  font-size: 14.5px;
   font-weight: 500;
-  line-height: 1.45;
+  line-height: 1.5;
   letter-spacing: 0;
   text-transform: none;
   text-align: left;
   white-space: normal;
-  box-shadow: 0 6px 18px -6px rgba(10, 16, 32, 0.45);
+  box-shadow: 0 12px 28px -8px rgba(10, 16, 32, 0.55);
   pointer-events: none;
   opacity: 0;
-  transform: translate(-50%, -4px);
+  visibility: hidden;
+  transform: translateY(calc(-100% - 6px));
   transition:
     opacity 0.16s ease,
-    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  transition-delay: 0s;
+    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear 0.18s;
 }
 
 [data-tip]:hover::after,
 [data-tip]:focus-visible::after {
   opacity: 1;
-  transform: translate(-50%, 0);
+  visibility: visible;
+  transform: translateY(calc(-100% - 10px));
   /* A short wait, so a cursor passing over a row of buttons does not flash five messages. */
-  transition-delay: 0.25s;
+  transition:
+    opacity 0.16s ease 0.25s,
+    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1) 0.25s,
+    visibility 0s linear 0.25s;
 }
 
-/* Filters sit in a narrow column at the left edge; a centred message would run off the side. */
-.tip-left[data-tip]::after {
-  left: 0;
-  transform: translate(0, -4px);
-}
-.tip-left[data-tip]:hover::after,
-.tip-left[data-tip]:focus-visible::after {
-  transform: translate(0, 0);
-}
-
-/* Buttons at the right edge open leftwards for the same reason. */
+/* Toolbar buttons sit near the top of the screen, where "above" would put the message off it, and
+   usually at the right edge, where it would run off the side. So these open below and leftwards.
+   The offset was measured on rendered buttons, not guessed: the message's natural position sits a
+   little above the button, and 74px clears both the full-size and the compact button below it. */
 .tip-right[data-tip]::after {
-  left: auto;
-  right: 0;
-  transform: translate(0, -4px);
+  transform: translate(calc(-100% + 60px), 66px);
 }
 .tip-right[data-tip]:hover::after,
 .tip-right[data-tip]:focus-visible::after {
-  transform: translate(0, 0);
+  transform: translate(calc(-100% + 60px), 74px);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-tip]::after {
-    transition: opacity 0.01s;
-    transform: translate(-50%, 0);
+  [data-tip]::after,
+  [data-tip]:hover::after {
+    transition: opacity 0.01s, visibility 0s;
   }
+}
+
+/* ---------------------------------------------------------------------------
+   The leads list, as three steps.
+
+   The operator's report was that the screen was confusing in two specific ways: the filters were a
+   column of their own down the left, and the buttons that act on the list were scattered across
+   the top in three groups with no order to them. So the page now reads 1, 2, 3 — choose, tick,
+   act — and each filter is a menu rather than a permanently open section.
+
+   `<details>` is the whole mechanism. It opens and closes with no JavaScript, keeps the page's
+   layout still while it is open (the panel is absolutely positioned), and closes on Escape in
+   every browser that supports it.
+   --------------------------------------------------------------------------- */
+
+.fmenu {
+  position: relative;
+}
+
+.fmenu > summary {
+  list-style: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1.5px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 15px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.fmenu > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fmenu > summary::after {
+  content: "▾";
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.fmenu[open] > summary,
+.fmenu > summary:hover {
+  border-color: var(--ink);
+}
+
+/* A menu whose filter is on says so on its face, so the chips below are a summary rather than the
+   only place the state lives. */
+.fmenu > summary[data-on="1"] {
+  border-color: var(--ink);
+  border-width: 2px;
+  font-weight: 700;
+  background: var(--surface-2);
+}
+
+.fmenu[open] > summary::after {
+  content: "▴";
+}
+
+.fmenu-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  min-width: 280px;
+  max-width: 380px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px -12px rgba(16, 20, 28, 0.4);
+}
+
+/* Near the right edge a menu would open off the screen; these open leftwards instead. */
+.fmenu.fmenu-right .fmenu-panel {
+  left: auto;
+  right: 0;
+}
+
+/* A filter that exists but cannot be used yet. Never hidden, never a dead button: visibly off,
+   with the reason on hover (see [data-tip]). */
+.fmenu-off {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border: 1.5px dashed var(--rule-2);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: 15px;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.fmenu-off b {
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* The chips: every choice that is on, each one removable on its own. */
+.fchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border: 1.5px solid var(--ink);
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 14.5px;
+  font-weight: 650;
+  text-decoration: none;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.fchip:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.step-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.step-num {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* Step 3 follows the operator down the page: with a long list, the buttons that act on it should
+   not be somewhere they have to scroll back to. */
+.act-bar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 30;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  box-shadow: 0 10px 30px -12px rgba(16, 20, 28, 0.35);
+}
+
+/* ---------------------------------------------------------------------------
+   Dashboard: the four stages as columns, with their numbers inside them.
+   --------------------------------------------------------------------------- */
+
+.dash-stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.dash-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1.5px solid var(--rule);
+  border-radius: 12px;
+}
+
+/* The arrow between two stages: it is a pipeline, so it reads left to right. */
+.dash-stage + .dash-stage::before {
+  content: "→";
+  position: absolute;
+  left: -12px;
+  top: 22px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--ink-3);
+  background: var(--paper);
+  border-radius: 999px;
+}
+
+.dash-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  font-size: 15px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule-2);
+}
+
+.dash-line:hover span {
+  text-decoration: underline;
+}
+
+.dash-next {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+}
+
+.dash-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.dash-bar {
+  display: grid;
+  gap: 5px;
+  text-decoration: none;
+  padding: 3px 0;
+}
+
+.dash-bar:hover > span:first-child > span:first-child {
+  text-decoration: underline;
+}
+
+.dash-track {
+  display: block;
+  height: 7px;
+  border-radius: 99px;
+  background: var(--rule-2);
+  overflow: hidden;
+}
+
+.dash-track > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--brand);
+}
+
+.dash-cost {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .dash-stages,
+  .dash-breakdowns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-stage:nth-child(odd)::before {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .dash-stages,
+  .dash-breakdowns,
+  .dash-cost {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-stage::before {
+    display: none;
+  }
+}
+
+/* NextAction carries its own minimum width for the flex rows it is used in elsewhere. Inside this
+   grid the columns decide the width, and that minimum would push the last card past the edge. */
+.dash-next > .card {
+  min-width: 0 !important;
+}
+
+/* A long explanation under a short verdict: two lines, the rest on hover. */
+.clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* The items of a menu that opens from a button, such as "Add businesses". */
+.menu-item {
+  display: grid;
+  gap: 1px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.menu-item span {
+  font-size: 14px;
+  color: var(--ink-3);
+}
+
+.menu-item:hover {
+  background: var(--surface-2);
+}
+
+/* The header menu's summary is already a button; it does not need the filter chevron twice. */
+.fmenu > summary.btn::after {
+  color: inherit;
+}
+
+/* A menu whose summary is a primary button keeps the button's own colours; the filter-menu rules
+   above would otherwise paint it white on white. */
+.fmenu > summary.btn {
+  background: var(--brand);
+  border: 1px solid var(--brand);
+  color: #fff;
+  font-weight: 650;
+  font-size: 16px;
+  padding: 10px 17px;
+}
+
+.fmenu > summary.btn:hover,
+.fmenu[open] > summary.btn {
+  background: var(--brand-ink);
+  border-color: var(--brand-ink);
+}
+
+/* A button that cannot be used right now has to look it — the panel says "switched off", and a
+   button that looks pressable while doing nothing is the confusing kind of wrong. */
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.42;
+  cursor: not-allowed;
+  filter: grayscale(0.4);
 }

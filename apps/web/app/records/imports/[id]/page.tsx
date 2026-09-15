@@ -76,7 +76,7 @@ export default async function ImportDetailPage({ params }: { params: Promise<{ i
           ) : (
             <>
               <Did on={plan.analyseWebsites} label="Read their websites and score them" note="Free" />
-              <Did on={plan.applyCategories} label="Sort them into your categories" note="Free" />
+              <Did on={plan.applyCategories} label="Matched to your ICPs" note="Free" />
               <Did
                 on={plan.instagram}
                 label="Go on to buy their Instagram"

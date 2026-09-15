@@ -151,10 +151,14 @@ interface Filters {
   from?: string;
   /** One import batch, so "show me what this file gave me" is a link rather than a memory test. */
   batch?: string;
-  /** The operator's own category, and its second level. */
-  category?: string;
-  subcategory?: string;
-  /** Which category rule assigned it — the link from the rules screen. */
+  /** Which of the operator's ICPs a business matched. */
+  icp?: string;
+  /** Google reviews: "none", or a floor such as "20". */
+  reviews?: string;
+  /** A town or state. */
+  where?: string;
+
+  /** Which ICP assigned it — the link from the ICPs screen. */
   rule?: string;
   /** "yes" | "no" — are they running Facebook/Instagram ads? */
   ads?: string;
@@ -178,12 +182,98 @@ interface Filters {
 }
 
 interface PageParams extends Filters {
+  /** "1" while step 3 is open. It rides in on a GET submit of the table, which carries the ticks. */
+  act?: string;
+  /** Which page of the list. Not a filter: changing any filter goes back to the first page. */
+  page?: string;
+  /**
+   * The ticked businesses, put here by that same submit. One value per tick.
+   *
+   * Deliberately on PageParams rather than on Filters: a selection is not a filter, and href()
+   * walks Filters to build every link on the page — a tick that leaked in there would follow the
+   * operator around the list for ever.
+   */
+  id?: string | string[];
   /** Set after a purchase or an analysis is enqueued, so the operator sees what they started. */
   bought?: string;
   /** Set after anything else that succeeded. Two names for one idea, kept because both are in use. */
   saved?: string;
   /** Set when starting something failed — shown rather than swallowed. */
   error?: string;
+}
+
+/**
+ * One filter, as a menu that opens over the page.
+ *
+ * `<details>` and nothing else: it opens, closes, and closes on Escape without a line of
+ * JavaScript, and because the panel is absolutely positioned the table below does not move when
+ * one is opened. The summary carries the chosen value, so a closed menu still says what it is
+ * doing.
+ */
+function Menu({
+  label,
+  value,
+  right,
+  children,
+}: {
+  label: string;
+  value?: string | null;
+  right?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <details className={right ? "fmenu fmenu-right" : "fmenu"}>
+      <summary data-on={value ? "1" : undefined}>
+        {label}
+        {value ? <>: {value}</> : null}
+      </summary>
+      <div className="fmenu-panel">{children}</div>
+    </details>
+  );
+}
+
+/** One thing the operator can do, with what it costs and who bills it stated beside it. */
+function ActionRow({
+  title,
+  what,
+  cost,
+  who,
+  children,
+  off,
+}: {
+  title: string;
+  what: string;
+  cost: string;
+  who: string;
+  children: React.ReactNode;
+  /**
+   * Why a button in this row cannot be pressed right now, said next to the button.
+   *
+   * The reason used to be stated once, at the top of the panel. Scrolled past, the buttons below
+   * simply looked broken — which is exactly how the operator read them.
+   */
+  off?: React.ReactNode;
+}) {
+  return (
+    <div style={{ border: "1.5px solid var(--rule)", borderRadius: 10, padding: "13px 15px", display: "grid", gap: 9 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 16.5, fontWeight: 700 }}>{title}</div>
+          <div style={{ fontSize: 14.5, color: "var(--ink-2)", lineHeight: 1.45 }}>{what}</div>
+        </div>
+        <div style={{ textAlign: "right", flex: "0 0 auto" }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>{cost}</div>
+          <div style={{ fontSize: 13.5, color: "var(--ink-3)" }}>{who}</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>{children}</div>
+      {off ? (
+        <div style={{ fontSize: 14, color: "var(--warn-ink)", lineHeight: 1.45 }}>
+          {off}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function href(current: Filters, change: Partial<Filters>): string {
@@ -202,6 +292,16 @@ function toggle(current: Filters, key: keyof Filters, value: string): string {
 
 export default async function RecordsPage({ searchParams }: { searchParams: Promise<PageParams> }) {
   const params = await searchParams;
+
+  /**
+   * The businesses ticked when step 3 was opened.
+   *
+   * Opening step 3 is a GET submit of the table itself, so the ticks arrive here as `id` in the
+   * query string. That is the only way a no-JavaScript page can carry a selection anywhere: the
+   * ticks belong to the form, and a link does not.
+   */
+  const tickedIds = (Array.isArray(params.id) ? params.id : params.id ? [params.id] : []).filter(Boolean);
+  const pageNo = Math.max(1, Math.floor(Number(params.page) || 1));
   const view = params.view === "everything" ? "everything" : params.view === "unanalysed" ? "unanalysed" : "ready";
   const current: Filters = {
     ...(view !== "ready" ? { view } : {}),
@@ -210,8 +310,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     ...(params.website && params.website !== "all" ? { website: params.website } : {}),
     ...(params.from && params.from !== "all" ? { from: params.from } : {}),
     ...(params.batch ? { batch: params.batch } : {}),
-    ...(params.category && params.category !== "all" ? { category: params.category } : {}),
-    ...(params.subcategory && params.subcategory !== "all" ? { subcategory: params.subcategory } : {}),
+    ...(params.icp && params.icp !== "all" ? { icp: params.icp } : {}),
+    ...(params.reviews && params.reviews !== "all" ? { reviews: params.reviews } : {}),
+    ...(params.where && params.where !== "all" ? { where: params.where } : {}),
     ...(params.rule ? { rule: params.rule } : {}),
     ...(params.ads && params.ads !== "all" ? { ads: params.ads } : {}),
     ...(params.minFollowers && params.minFollowers !== "all" ? { minFollowers: params.minFollowers } : {}),
@@ -233,7 +334,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
   const businessesQuery = supabase
     .from("businesses")
     .select(
-      "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, category, subcategory, category_rule_id, scored_at",
+      "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, icp_name, icp_id, scored_at",
     )
     .eq("status", "active")
     .order("tier", { ascending: true, nullsFirst: false })
@@ -348,31 +449,108 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     return rows.filter((b) => matchesFilters(b as unknown as LeadRow, f, ctx)).length;
   };
 
+  /**
+   * The towns and states actually on the list, commonest first.
+   *
+   * Built from the rows rather than from a fixed list of places, for the same reason the ICP list
+   * is: a place nobody in the list is in would be a filter that can only ever return nothing.
+   */
+  const placeCounts = new Map<string, number>();
+  for (const b of withinView) {
+    for (const part of [b.city, b.state]) {
+      const name = (part ?? "").trim();
+      if (name.length > 0) placeCounts.set(name, (placeCounts.get(name) ?? 0) + 1);
+    }
+  }
+  const PAGE_SIZE = 50;
+  const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const safePage = Math.min(pageNo, pageCount);
+  const pageRows = shown.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const firstShown = shown.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const lastShown = (safePage - 1) * PAGE_SIZE + pageRows.length;
+  const pageHref = (n: number) => {
+    const base = href(current, {});
+    return `${base}${base.includes("?") ? "&" : "?"}page=${n}`;
+  };
+
+  const places = [...placeCounts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+
   const anyFilter = Boolean(
     current.tier ||
       current.route ||
       current.website ||
       current.from ||
       current.batch ||
-      current.category ||
-      current.subcategory ||
+      current.icp ||
+      current.reviews ||
+      current.where ||
       current.rule ||
       current.ads ||
       current.minFollowers,
   );
 
-  // Built from what is actually on the list rather than from the rules table, so a category with
+  // Built from what is actually on the list rather than from the ICPs table, so an ICP with
   // no businesses in it never appears as a filter that leads nowhere.
-  const categoryPairs = new Map<string, { category: string; subcategory: string | null; count: number }>();
+  const icpCounts = new Map<string, number>();
   for (const b of withinView) {
-    if (!b.category) continue;
-    const key = `${b.category}||${b.subcategory ?? ""}`;
-    const existing = categoryPairs.get(key);
-    if (existing) existing.count += 1;
-    else categoryPairs.set(key, { category: b.category, subcategory: b.subcategory, count: 1 });
+    if (!b.icp_name) continue;
+    icpCounts.set(b.icp_name, (icpCounts.get(b.icp_name) ?? 0) + 1);
   }
-  const categoryList = [...categoryPairs.values()].sort((a, b) => b.count - a.count);
-  const uncategorised = withinView.filter((b) => !b.category).length;
+  const icpList = [...icpCounts.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+
+  /**
+   * Every choice that is on, each removable on its own.
+   *
+   * The operator could previously see *that* a list was filtered only by reading down the sidebar
+   * for highlighted rows. A chip says what is on in words, and takes exactly that one thing off
+   * again — which is the difference between a state you can see and a state you have to hunt for.
+   */
+  const chips: { label: string; remove: string }[] = [];
+  if (view !== "ready")
+    chips.push({
+      label: view === "unanalysed" ? "Not analysed yet" : "Everything",
+      remove: href(current, { view: "ready" }),
+    });
+  if (current.claimed)
+    chips.push({
+      label:
+        current.claimed === "me" ? "Mine" : current.claimed === "anyone" ? "Claimed by anyone" : "Nobody has claimed",
+      remove: href(current, { claimed: "" }),
+    });
+  if (current.tier) chips.push({ label: `Priority ${current.tier}`, remove: href(current, { tier: "" }) });
+  if (current.route)
+    chips.push({ label: ROUTE_LABELS[current.route] ?? current.route, remove: href(current, { route: "" }) });
+  if (current.website)
+    chips.push({ label: WEBSITE_LABELS[current.website] ?? current.website, remove: href(current, { website: "" }) });
+  if (current.icp) chips.push({ label: `ICP: ${current.icp}`, remove: href(current, { icp: "" }) });
+  if (current.reviews)
+    chips.push({
+      label: current.reviews === "none" ? "No reviews at all" : `${current.reviews}+ Google reviews`,
+      remove: href(current, { reviews: "" }),
+    });
+  if (current.where) chips.push({ label: `In ${current.where}`, remove: href(current, { where: "" }) });
+  if (current.ads)
+    chips.push({ label: current.ads === "yes" ? "Running ads now" : "Not running ads", remove: href(current, { ads: "" }) });
+  if (current.minFollowers)
+    chips.push({
+      label: `${Number(current.minFollowers).toLocaleString()}+ followers`,
+      remove: href(current, { minFollowers: "" }),
+    });
+  if (current.from)
+    chips.push({
+      label: current.from === "discovered" ? "Found by search" : current.from === "imported" ? "From a file" : "Added by hand",
+      remove: href(current, { from: "" }),
+    });
+  if (current.batch)
+    chips.push({ label: batchNames.get(current.batch) ?? "One file", remove: href(current, { batch: "" }) });
+  if (current.rule) chips.push({ label: "One ICP rule", remove: href(current, { rule: "" }) });
+  if (current.q) chips.push({ label: `“${current.q}”`, remove: href(current, { q: "" }) });
+  if (current.sort === "colour") chips.push({ label: "Grouped by colour", remove: href(current, { sort: "" }) });
+  const inNoIcp = withinView.filter((b) => !b.icp_name).length;
   const anySocial = social.size > 0;
 
   return (
@@ -384,23 +562,30 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
       title="Leads"
       what={
         <>
-          The call list, ordered so the best call is the first row. Filter it on the left; tick
-          businesses to buy extra data for just those. For totals and charts see the{" "}
-          <Link href="/dashboard">dashboard</Link>.
+          Your call list, best call first. Three steps: choose businesses, tick the ones you want,
+          then act on them.
         </>
       }
       actions={
-        <>
-          <Link href="/records/new" className="btn-2 btn">
-            Add one by hand
-          </Link>
-          <Link href="/records/import" className="btn-2 btn">
-            Import a list
-          </Link>
-          <Link href="/search" className="btn">
-            Find businesses
-          </Link>
-        </>
+        // One menu rather than three buttons: all three answer the same question — how do I get
+        // more businesses in — and the header is not where the eye should be deciding between them.
+        <details className="fmenu fmenu-right">
+          <summary className="btn" style={{ border: 0 }}>
+            Add businesses
+          </summary>
+          <div className="fmenu-panel" style={{ padding: 8, display: "grid", gap: 2, minWidth: 300 }}>
+            {[
+              { href: "/search", label: "Find businesses", what: "Search Google Maps for one of your ICPs" },
+              { href: "/records/import", label: "Import a list", what: "Upload a spreadsheet you already have" },
+              { href: "/records/new", label: "Add one by hand", what: "Type in a single business" },
+            ].map((item) => (
+              <Link key={item.href} href={item.href} className="menu-item">
+                <strong>{item.label}</strong>
+                <span>{item.what}</span>
+              </Link>
+            ))}
+          </div>
+        </details>
       }
     >
       <>
@@ -445,44 +630,6 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
           </div>
         )}
 
-        {/*
-          * Every whole-list job, with a button, and each one saying what it costs.
-          *
-          * Two of these had no way to be started from anywhere in the product: reading websites
-          * page by page could only be done one business at a time from its own record, and
-          * re-scoring could not be done at all. Both tasks existed and worked. The operator's
-          * report was the general form of it - the things that were built should have buttons,
-          * and the buttons should work.
-          *
-          * Each says what it costs and who bills it, because a button that might spend money and
-          * does not say so is a button nobody can press with confidence.
-          */}
-        <Panel
-          title="Run something over the whole list"
-          hint="Each of these works through every business. Progress appears at the top of the screen and keeps updating while you work."
-          tone="brand"
-        >
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 1, background: "var(--rule)" }}>
-            {WHOLE_LIST_JOBS.map((job) => (
-              <div key={job.title} style={{ background: "var(--surface)", padding: "16px 18px", display: "flex", flexDirection: "column", gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 16.5, fontWeight: 750, color: "var(--ink)" }}>{job.title}</div>
-                  <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55, marginTop: 4 }}>{job.what}</div>
-                </div>
-                <div style={{ marginTop: "auto", display: "flex", alignItems: "flex-end", gap: 14, flexWrap: "wrap" }}>
-                  <form action={job.action}>
-                    <button className={job.primary ? "btn" : "btn-2 btn"} type="submit" data-tip={job.tip}>
-                      {job.button}
-                    </button>
-                  </form>
-                  <span style={{ marginLeft: "auto" }}>
-                    <Price cents={job.cents} what={job.buys} platform={job.platform} free={job.cents === 0} />
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
 
         {/*
           * The search form itself, declared outside the table so the two do not nest.
@@ -501,31 +648,65 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
             <input key={key} type="hidden" form="lead-search" name={key} value={String(value)} />
           ))}
 
-        {/* ---- Sidebar of filters, main column of rows -------------------------------- */}
-        <div className="work-layout">
-          <aside className="work-filters" style={{ ...PANEL, marginBottom: 0 }}>
-            <div
-              style={{
-                padding: "12px 16px",
-                borderBottom: "1px solid var(--rule)",
-                display: "flex",
-                alignItems: "baseline",
-                gap: 8,
-              }}
-            >
-              <span style={{ fontSize: 14.5, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                Filters
-              </span>
-              {anyFilter && (
-                <Link
-                  href={href({ ...(view !== "ready" ? { view } : {}) }, {})}
-                  style={{ marginLeft: "auto", fontSize: 14 }}
-                >
-                  Clear all
-                </Link>
-              )}
+        {/*
+          ---- The list, as three steps ------------------------------------------------
+
+          The operator's report, in their words: the filters were half the confusion and the row of
+          whole-list buttons was the other half. Both were true of the old shape — a column of
+          permanently open filter sections down the left, and three separate groups of buttons
+          along the top with no order between them.
+
+          So the page reads 1, 2, 3 now. Choose who you are looking at, tick the ones you want, act
+          on them — and the width of the table no longer changes when a filter panel opens, because
+          the panels float over the page instead of sitting beside it.
+        */}
+        <div style={{ display: "grid", gap: 16 }}>
+          <section style={{ ...PANEL, marginBottom: 0, padding: "16px 18px", display: "grid", gap: 13 }}>
+            <div className="step-head">
+              <span className="step-num">1</span>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>Choose which businesses</div>
+                <div style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
+                  Pick from the menus. Every choice shows as a chip below, so you always see what is
+                  on — and the table below never moves.
+                </div>
+              </div>
             </div>
 
+            {/*
+             * Search, as a GET form.
+             *
+             * A GET form needs no JavaScript: the browser puts the box's contents in the query
+             * string and the server filters on it, which is the same mechanism every filter menu
+             * beside it already uses.
+             *
+             * The other filters travel with it as hidden inputs, so searching inside "Priority 1,
+             * running ads" narrows that set rather than silently throwing it away.
+             */}
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <input
+                type="search"
+                name="q"
+                form="lead-search"
+                defaultValue={current.q ?? ""}
+                placeholder="Search a business by name, town or ICP"
+                className="inp"
+                style={{ flex: "1 1 320px", maxWidth: 520 }}
+                aria-label="Search businesses"
+              />
+              <button className="btn" type="submit" form="lead-search" data-tip="Find businesses whose name, town or ICP contains what you typed. Your other filters stay on.">
+                Search
+              </button>
+              {current.q ? (
+                <Link href={href(current, { q: "" })} className="btn-2 btn">
+                  Clear &ldquo;{current.q}&rdquo;
+                </Link>
+              ) : null}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+
+            <Menu label="Show" value={view === "ready" ? "Worth calling" : view === "unanalysed" ? "Not analysed" : "Everything"}>
             <FilterSection title="Show" hint="Which businesses appear at all.">
               <FilterOption
                 label="Worth calling"
@@ -552,6 +733,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                 />
               )}
             </FilterSection>
+            </Menu>
 
             {/*
               * Who has claimed what.
@@ -560,6 +742,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               * there was no way to ask "which ones are mine?" without reading the whole list. That
               * makes claiming a note to nobody.
               */}
+            <Menu label="Claimed" value={current.claimed === "me" ? "Mine" : current.claimed === "anyone" ? "Anyone" : current.claimed === "nobody" ? "Nobody" : null}>
             <FilterSection title="Claimed" hint="Who has put their name on a lead.">
               <FilterOption
                 label="Mine"
@@ -585,6 +768,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               />
             </FilterSection>
 
+            </Menu>
+
+            <Menu label="Priority" value={current.tier ?? null}>
             <FilterSection title="Priority" hint="How good a lead is, 1 being the best.">
               {[1, 2, 3, 4].map((tier) => (
                 <FilterOption
@@ -597,6 +783,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               ))}
             </FilterSection>
 
+            </Menu>
+
+            <Menu label="What to sell" value={current.route ? ROUTE_LABELS[current.route] ?? current.route : null}>
             <FilterSection title="What to sell them" hint="The area with the most wrong.">
               {Object.entries(ROUTE_LABELS).map(([route, label]) => (
                 <FilterOption
@@ -609,6 +798,9 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               ))}
             </FilterSection>
 
+            </Menu>
+
+            <Menu label="Website" value={current.website ? WEBSITE_LABELS[current.website] ?? current.website : null}>
             <FilterSection title="Their website" hint="What we found when we visited.">
               {Object.entries(WEBSITE_LABELS).map(([status, label]) => (
                 <FilterOption
@@ -621,30 +813,86 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               ))}
             </FilterSection>
 
-            {categoryList.length > 0 && (
-              <FilterSection title="Category" hint="Your own rules decide these — edit them on the Categories page.">
-                {categoryList.map((c) => (
+            </Menu>
+
+            {icpList.length > 0 && (
+              <Menu label="ICP" value={current.icp ?? null}>
+              <FilterSection title="ICP" hint="Who you want to sell to. You write these on the ICPs page.">
+                {icpList.map((c) => (
                   <FilterOption
-                    key={`${c.category}-${c.subcategory ?? ""}`}
-                    label={c.subcategory ? `${c.category} › ${c.subcategory}` : c.category}
+                    key={c.name}
+                    label={c.name}
                     count={c.count}
-                    href={
-                      c.subcategory
-                        ? href(current, { category: c.category, subcategory: c.subcategory })
-                        : toggle(current, "category", c.category)
-                    }
-                    active={current.category === c.category && (current.subcategory ?? null) === c.subcategory}
+                    href={toggle(current, "icp", c.name)}
+                    active={current.icp === c.name}
                   />
                 ))}
-                {uncategorised > 0 && (
+                {inNoIcp > 0 && (
                   <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 6, lineHeight: 1.4 }}>
-                    {uncategorised} match no rule yet. <Link href="/categories">Write one</Link>.
+                    {inNoIcp} match no ICP yet. <Link href="/icps">Write one</Link>.
                   </div>
                 )}
               </FilterSection>
+              </Menu>
             )}
 
+            {/* Reviews and where, both new. Both are facts an ICP can ask about, so the list can
+                ask about them too — and both refuse when the answer is unknown rather than
+                counting a business nobody has looked up. */}
+            <Menu label="Reviews" value={current.reviews === "none" ? "None at all" : current.reviews ? `${current.reviews}+` : null}>
+              <FilterSection title="Google reviews" hint="Only counts businesses whose listing has been bought.">
+                <FilterOption
+                  label="50 or more"
+                  explain="Proven demand"
+                  count={countIf({ reviews: "50" })}
+                  href={toggle(current, "reviews", "50")}
+                  active={current.reviews === "50"}
+                  accent
+                />
+                <FilterOption
+                  label="20 or more"
+                  count={countIf({ reviews: "20" })}
+                  href={toggle(current, "reviews", "20")}
+                  active={current.reviews === "20"}
+                />
+                <FilterOption
+                  label="1 or more"
+                  count={countIf({ reviews: "1" })}
+                  href={toggle(current, "reviews", "1")}
+                  active={current.reviews === "1"}
+                />
+                <FilterOption
+                  label="None at all"
+                  explain="Looked up, and has none"
+                  count={countIf({ reviews: "none" })}
+                  href={toggle(current, "reviews", "none")}
+                  active={current.reviews === "none"}
+                />
+                <div style={{ fontSize: 14, color: "var(--ink-3)", marginTop: 6, lineHeight: 1.45 }}>
+                  A business whose Google listing nobody has bought has no answer here, so it is left
+                  out of all four rather than counted as having none.
+                </div>
+              </FilterSection>
+            </Menu>
+
+            <Menu label="Where" value={current.where ?? null}>
+              <FilterSection title="Town or state" hint="Matched against both, so “Texas” and “Dallas” both work.">
+                <div style={{ display: "grid", gap: 7 }}>
+                  {places.slice(0, 10).map((place) => (
+                    <FilterOption
+                      key={place.name}
+                      label={place.name}
+                      count={place.count}
+                      href={toggle(current, "where", place.name)}
+                      active={current.where === place.name}
+                    />
+                  ))}
+                </div>
+              </FilterSection>
+            </Menu>
+
             {anySocial && (
+              <Menu label="Instagram &amp; ads" value={current.ads === "yes" ? "Running ads" : current.ads === "no" ? "No ads" : current.minFollowers ? `${Number(current.minFollowers).toLocaleString()}+ followers` : null}>
               <FilterSection title="Instagram &amp; ads" hint="Only for businesses whose Instagram or ads you have bought.">
                 <FilterOption
                   label="Running ads now"
@@ -670,8 +918,10 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   />
                 ))}
               </FilterSection>
+              </Menu>
             )}
 
+            <Menu label="Where from" value={current.from === "discovered" ? "Search" : current.from === "imported" ? "A file" : current.from === "manual" ? "By hand" : null}>
             <FilterSection title="Where from" hint="Businesses from a file cannot be scored on Google reviews.">
               {BUSINESS_ORIGINS.map((origin) => (
                 <FilterOption
@@ -684,7 +934,10 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               ))}
             </FilterSection>
 
+            </Menu>
+
             {current.batch && (
+              <Menu label="One file" value={batchNames.get(current.batch) ?? "a file"}>
               <FilterSection title="One file" hint="You followed a link from the imported files page.">
                 <div style={{ fontSize: 15, color: "var(--ink-2)", marginBottom: 6 }}>
                   {batchNames.get(current.batch) ?? "an uploaded file"}
@@ -693,15 +946,66 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   Show every file
                 </Link>
               </FilterSection>
+              </Menu>
             )}
 
-            <div style={{ padding: "12px 16px", fontSize: 14.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
-              Spent so far <strong style={{ color: "var(--ink)" }}>${(spentCents / 100).toFixed(2)}</strong> on paid
-              lookups. Reading websites and scoring are free.
-              {" "}
-              <Link href="/records/imports">Files you imported</Link>
+            {/*
+              Two filters that exist and cannot be used.
+
+              The operator asked for exactly this rather than for them to be hidden: a filter that
+              is missing looks like something nobody thought of, one that is switched off with a
+              reason looks like a decision. Nobody publishes what a small private business earns or
+              spends, so there is nothing to filter on today.
+            */}
+            <span
+              className="fmenu-off"
+              tabIndex={0}
+              data-tip="Switched off: no provider publishes what a small business spends, and nothing on their own website says it. Filtering on it would mean inventing the number. See Data & spend."
+            >
+              Budget <b>off</b>
+            </span>
+            <span
+              className="fmenu-off"
+              tabIndex={0}
+              data-tip="Switched off: revenue for small private businesses is not published anywhere. It can be bought per business from a data provider later, and the price will be shown before anything is spent."
+            >
+              Revenue <b>off</b>
+            </span>
             </div>
-          </aside>
+
+            {/* What is on, as chips. Each one removes only itself; Clear all removes the lot. */}
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+                borderTop: "1px solid var(--rule-2)",
+                paddingTop: 12,
+              }}
+            >
+              <span style={{ fontSize: 14.5, fontWeight: 700 }}>Showing:</span>
+              {chips.length === 0 ? (
+                <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
+                  everything worth calling — no filters on
+                </span>
+              ) : (
+                chips.map((chip) => (
+                  <Link key={chip.label} href={chip.remove} className="fchip" title={`Remove: ${chip.label}`}>
+                    {chip.label} <span aria-hidden>✕</span>
+                  </Link>
+                ))
+              )}
+              {chips.length > 1 && (
+                <Link href={href({ ...(view !== "ready" ? { view } : {}) }, {})} style={{ fontSize: 14.5 }}>
+                  Clear all
+                </Link>
+              )}
+              <span style={{ marginLeft: "auto", fontSize: 16, fontWeight: 700 }}>
+                {shown.length} of {rows.length} businesses
+              </span>
+            </div>
+          </section>
 
           <div style={{ minWidth: 0 }}>
             {current.from === "imported" && (
@@ -735,43 +1039,31 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               // Release use `formAction` rather than forms of their own — a form inside a form is
               // invalid, and the browser's response is to drop the inner one, which silently broke
               // the Claim button for as long as it was written that way.
-              <form action={getPaidDataForTicked} style={{ ...PANEL, marginBottom: 0, overflowX: "auto" }}>
+              <>
+              <form id="lead-table" action={getPaidDataForTicked} style={{ ...PANEL, marginBottom: 0, overflowX: "auto" }}>
+                <div className="step-head" style={{ padding: "14px 16px 0" }}>
+                  <span className="step-num">2</span>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>Tick the ones you want</div>
+                    <div style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
+                      Or tick none — step 3 can act on every business shown instead.
+                    </div>
+                  </div>
+                </div>
                 {Object.entries(current).map(([key, value]) => (
                   <input key={key} type="hidden" name={`f_${key}`} value={value} />
                 ))}
-
                 {/*
-                  * Search, as a GET form.
-                  *
-                  * There was no way to find a named business anywhere in the product - the only
-                  * route to one was to filter the list down and read it. A GET form needs no
-                  * JavaScript: the browser puts the box's contents in the query string and the
-                  * server filters on it, which is the same mechanism every filter link beside it
-                  * already uses.
-                  *
-                  * The other filters travel with it as hidden inputs, so searching inside "Priority
-                  * 1, running ads" narrows that set rather than silently throwing it away.
-                  */}
-                <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "12px 16px", borderBottom: "1px solid var(--rule)", flexWrap: "wrap" }}>
-                  <input
-                    type="search"
-                    name="q"
-                    form="lead-search"
-                    defaultValue={current.q ?? ""}
-                    placeholder="Search a business by name, town or category"
-                    className="inp"
-                    style={{ flex: "1 1 320px", maxWidth: 520 }}
-                    aria-label="Search businesses"
-                  />
-                  <button className="btn" type="submit" form="lead-search" data-tip="Find businesses whose name, town or category contains what you typed. Your other filters stay on.">
-                    Search
-                  </button>
-                  {current.q ? (
-                    <Link href={href(current, { q: "" })} className="btn-2 btn">
-                      Clear &ldquo;{current.q}&rdquo;
-                    </Link>
-                  ) : null}
-                </div>
+                  The same filters again, under their own names.
+
+                  Opening step 3 is a GET submit of this form, and a GET submit builds the URL out
+                  of the form's fields alone. Without these the panel would open on an unfiltered
+                  list: the `f_` copies above are what the server actions read, and the page itself
+                  reads the plain names.
+                */}
+                {Object.entries(current).map(([key, value]) => (
+                  <input key={`plain-${key}`} type="hidden" name={key} value={value} />
+                ))}
 
                 <div
                   style={{
@@ -852,56 +1144,25 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   <span style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     {/* Zero-JavaScript select-all: a link that re-renders every row already ticked. */}
                     <Link href={href(current, { all: current.all === "1" ? "" : "1" })} style={{ fontSize: 15 }}>
-                      {current.all === "1" ? `Untick all ${shown.length}` : `Tick all ${shown.length}`}
+                      {current.all === "1"
+                        ? pageRows.length < shown.length
+                          ? "Untick this page"
+                          : `Untick all ${shown.length}`
+                        : pageRows.length < shown.length
+                          ? `Tick all ${pageRows.length} on this page`
+                          : `Tick all ${shown.length}`}
                     </Link>
-                    <a href={`/records/export${href(current, {}).replace("/records", "")}`} style={{ fontSize: 15 }}>
-                      Download CSV
-                    </a>
-                    {/* Hidden in the "not analysed" view on purpose. The confirm screen rebuilds
-                        the selection from the filters it is handed, and "has never been analysed"
-                        is not a column it can filter on — it would silently price a different set
-                        of businesses than the one on screen. Ticking rows still works there. */}
-                    {view !== "unanalysed" && (
-                      <button
-                        className="btn-2 btn"
-                        type="submit"
-                        formAction={getPaidDataForFiltered}
-                        style={{ padding: "6px 12px", fontSize: 15 }}
-                        data-tip="Opens a confirm screen that prices extra data for every business the filters are showing. Nothing is bought until you confirm there."
-                      >
-                        Get paid data for all {shown.length}
-                      </button>
-                    )}
-                    <button
-                      className="btn tip-right"
-                      type="submit"
-                      style={{ padding: "6px 12px", fontSize: 15 }}
-                      data-tip="Opens a confirm screen that prices extra data for the rows you ticked. Nothing is bought until you confirm there."
-                    >
-                      Get paid data for ticked
-                    </button>
 
                     {/*
-                      * Reads only the ticked businesses.
+                      * Every action now lives in step 3, and this is the only button that leads
+                      * there.
                       *
-                      * `formAction` rather than a form of its own, because a checkbox belongs to
-                      * exactly one form and these ticks already belong to the buy form around the
-                      * table. Overriding where this one button submits is what lets the same ticks
-                      * drive two different things — which is what the operator asked for: the
-                      * whole-list button at the top does everything, this does only what they chose.
-                      *
-                      * Free of any provider charge except the model's read, the same 0.36¢ a site
-                      * the top button quotes.
+                      * They used to be three buttons in this row — buy for everyone, buy for the
+                      * ticked, read the ticked — each with its own scope baked into its label. The
+                      * operator's report was that this row was half the confusion on the screen,
+                      * and it was: three scopes, three prices and no order between them, in the
+                      * place the eye is busiest.
                       */}
-                    <button
-                      type="submit"
-                      formAction={auditTickedWebsites}
-                      style={{ padding: "6px 12px", fontSize: 15 }}
-                      className="btn-2 btn tip-right"
-                      data-tip="Opens the ticked businesses' websites in a real browser, keeps screenshots, finds social links and re-scores them. About 0.36¢ a site."
-                    >
-                      Read ticked page by page
-                    </button>
                   </span>
                 </div>
 
@@ -919,18 +1180,21 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                         * whatever the others left.
                         */}
                       <Th label="" width={40} />
-                      <Th label="No." explain="1 is best" width={62} />
-                      <Th label="Business" explain="Click to open the full report" width="21%" />
-                      <Th label="What to sell them" explain="The area with the most wrong" width="23%" />
-                      <Th label="Scores" explain="Problem: how much is wrong. Signals: do they pay?" width={168} />
-                      <Th label="Category" explain="From your own rules" width="13%" />
-                      <Th label="Instagram" explain="Followers, and whether they advertise" width="12%" />
-                      <Th label="Contact" explain="What we have to reach them" width="11%" />
-                      <Th label="" explain="claim" width={96} />
+                      {/* One line each, as the wireframe has them. The explanations these used to
+                          carry under every heading made the header four lines tall; what each
+                          column means is on the leads list's hover help and in How it works. */}
+                      <Th label="Priority" width={96} />
+                      <Th label="Business" width="21%" />
+                      <Th label="What to sell" width="23%" />
+                      <Th label="Scores" width={168} />
+                      <Th label="ICP" width="13%" />
+                      <Th label="Instagram" width="12%" />
+                      <Th label="Contact" width="11%" />
+                      <Th label="" width={96} />
                     </tr>
                   </thead>
                   <tbody>
-                    {shown.map((b) => {
+                    {pageRows.map((b) => {
                       const isMine = claims?.sub && b.claimed_by === claims.sub;
                       // Same definition as the banner and the task. See the note beside
                       // `neverAnalysed` for why there is only one of these now.
@@ -947,8 +1211,10 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                               name="id"
                               value={b.id}
                               // Ticked by the "select all" link in the header, which reloads with
-                              // `all=1` rather than running a script. See the Filters type.
-                              defaultChecked={current.all === "1"}
+                              // `all=1` rather than running a script. See the Filters type — and
+                              // re-ticked when step 3 sends the page back with the ids it carried,
+                              // so opening the actions never loses what was chosen.
+                              defaultChecked={current.all === "1" || tickedIds.includes(b.id)}
                               aria-label={`Select ${b.display_name}`}
                               style={{ width: 16, height: 16, cursor: "pointer" }}
                             />
@@ -984,7 +1250,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                               <>
                                 <div style={{ fontWeight: 600, fontSize: 15 }}>{ROUTE_LABELS[b.route] ?? b.route}</div>
                                 {b.route_reason && (
-                                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2, lineHeight: 1.4 }}>
+                                  <div className="clamp-2" title={b.route_reason} style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2, lineHeight: 1.4 }}>
                                     {b.route_reason}
                                   </div>
                                 )}
@@ -1005,15 +1271,10 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                             )}
                           </td>
                           <td style={TD}>
-                            {b.category ? (
-                              <>
-                                <div style={{ fontSize: 15 }}>{b.category}</div>
-                                {b.subcategory ? (
-                                  <div style={{ fontSize: 14.5, color: "var(--ink-3)" }}>{b.subcategory}</div>
-                                ) : null}
-                              </>
+                            {b.icp_name ? (
+                              <div style={{ fontSize: 15 }}>{b.icp_name}</div>
                             ) : (
-                              <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>no rule matched</span>
+                              <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>in no ICP</span>
                             )}
                           </td>
                           <td style={TD}>
@@ -1078,6 +1339,39 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   </tbody>
                 </table>
 
+                {/*
+                  Fifty rows a page.
+
+                  The whole list rendered at once was 176 rows and over twenty thousand pixels, most
+                  of which nobody reads in one sitting — and every one of them was built on the
+                  server before the first could be seen. The step 3 panel still acts on everything
+                  the filters show; only the rows drawn are paged.
+                */}
+                {pageCount > 1 && (
+                  <div style={{ display: "flex", gap: 14, alignItems: "center", padding: "12px 16px", borderTop: "1px solid var(--rule)", fontSize: 15 }}>
+                    <span style={{ color: "var(--ink-2)" }}>
+                      Showing {firstShown}–{lastShown} of {shown.length}
+                    </span>
+                    <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                      {pageNo > 1 ? (
+                        <Link href={pageHref(pageNo - 1)} className="btn-2 btn">
+                          ← Previous
+                        </Link>
+                      ) : null}
+                      <span style={{ alignSelf: "center", color: "var(--ink-3)" }}>
+                        Page {pageNo} of {pageCount}
+                      </span>
+                      {pageNo < pageCount ? (
+                        <Link href={pageHref(pageNo + 1)} className="btn-2 btn">
+                          Next →
+                        </Link>
+                      ) : null}
+                    </span>
+                  </div>
+                )}
+
+
+
                 <Note>
                   <strong>Problem</strong> is how much is wrong with their online presence, out of
                   100. <strong>Signals</strong> is how much evidence there is that they already pay
@@ -1085,6 +1379,232 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   both is the best possible lead, and that is what Priority 1 means.
                 </Note>
               </form>
+
+              {/*
+                Step 3 sits outside the table's form on purpose, and reaches back into it with the
+                `form` attribute.
+
+                Inside the form it could never follow the operator down the page: the form scrolls
+                sideways, and a sticky element is only sticky within the box that scrolls. Out here
+                it sticks to the bottom of the screen for the whole length of the list — and its
+                buttons still submit the ticks, because `form="lead-table"` names the form they
+                belong to wherever they sit. It also lets the whole-list jobs below be forms of their
+                own, which a form inside a form could not be.
+              */}
+                {/* Step 3 rides inside the table's own form, because the ticks do. Opening it is
+                    a GET submit: the browser puts every ticked id in the query string, the page
+                    comes back with the panel open and those rows still ticked. */}
+
+                <div className="act-bar" style={{ margin: "14px 16px 16px" }}>
+                  <span className="step-num">3</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 17, fontWeight: 700 }}>Do something with them</div>
+                    <div style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
+                      Analyse, read their pages, buy extra data or download them — each with its
+                      price before anything starts.
+                    </div>
+                  </div>
+                  <span style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center" }}>
+                    <span style={{ fontSize: 15, color: "var(--ink-2)" }}>
+                      {tickedIds.length > 0 ? `${tickedIds.length} ticked` : `${shown.length} shown`}
+                    </span>
+                    <button
+                      className="btn tip-right"
+                      type="submit"
+                      form="lead-table"
+                      formMethod="get"
+                      formAction="/records"
+                      name="act"
+                      value="1"
+                      data-tip="Opens one panel with everything you can do to these businesses, each with what it costs and who bills it. Nothing starts until you press a button inside it."
+                    >
+                      Choose what to do →
+                    </button>
+                  </span>
+                </div>
+                {/*
+                  Step 3 itself: one panel, every action, each with its price and who bills it.
+
+                  It lives inside the table's form so the buttons in it submit the same ticks the
+                  operator made — `formAction` sends each one somewhere different, which is how one
+                  set of checkboxes drives six different things without a line of JavaScript.
+                */}
+                {params.act === "1" && (
+                  <div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
+                    <Link
+                      href={href(current, {})}
+                      aria-label="Close without doing anything"
+                      style={{ position: "absolute", inset: 0, background: "rgba(16, 20, 28, 0.45)" }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        width: "min(680px, 100%)",
+                        background: "var(--paper)",
+                        borderLeft: "2px solid var(--rule)",
+                        overflowY: "auto",
+                        padding: "20px 22px 40px",
+                        display: "grid",
+                        gap: 14,
+                        alignContent: "start",
+                        boxShadow: "0 0 60px -10px rgba(16, 20, 28, 0.45)",
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 22, fontWeight: 700 }}>Do something with them</div>
+                          <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 3 }}>
+                            Nothing starts until you press one of these.
+                          </div>
+                        </div>
+                        <Link href={href(current, {})} className="btn-2 btn" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
+                          ✕ Close
+                        </Link>
+                      </div>
+
+                      <div style={{ ...PANEL, marginBottom: 0, padding: "12px 14px", fontSize: 15.5, lineHeight: 1.5 }}>
+                        {tickedIds.length > 0 ? (
+                          <>
+                            <strong>{tickedIds.length} ticked.</strong> Everything below acts on those,
+                            except where it says otherwise.
+                          </>
+                        ) : (
+                          <>
+                            <strong>Nothing is ticked.</strong> The buttons that need a selection are
+                            switched off; the ones that act on all {shown.length} shown still work.
+                          </>
+                        )}
+                      </div>
+
+                      <ActionRow
+                        title="Analyse them"
+                        what="Reads their website, runs the 51 checks, measures their speed and scores them again. No provider is paid for any of it."
+                        cost="Free"
+                        who="our own crawler and Google PageSpeed"
+                        off={
+                          tickedIds.length === 0 ? (
+                            <>
+                              Switched off because nothing is ticked. Close this, tick businesses in
+                              step 2, then press <strong>Choose what to do</strong> again.
+                            </>
+                          ) : undefined
+                        }
+                      >
+                        <button
+                          type="submit"
+                          form="lead-table"
+                          formAction={analyseUnscored}
+                          className="btn"
+                          disabled={tickedIds.length === 0}
+                          data-tip="Runs the whole analysis on the businesses you ticked, in one go."
+                        >
+                          Run on {tickedIds.length > 0 ? `these ${tickedIds.length}` : "the ticked"}
+                        </button>
+                      </ActionRow>
+
+                      <ActionRow
+                        title="Read their pages in a browser"
+                        what="Opens each page, keeps screenshots, finds social links and re-scores. No Google listing is bought."
+                        cost="0.36¢ a site"
+                        who="Google AI Studio (Gemini)"
+                        off={
+                          tickedIds.length === 0 ? (
+                            <>
+                              Switched off because nothing is ticked. Close this, tick businesses in
+                              step 2, then press <strong>Choose what to do</strong> again.
+                            </>
+                          ) : undefined
+                        }
+                      >
+                        <button
+                          type="submit"
+                          form="lead-table"
+                          formAction={auditTickedWebsites}
+                          className="btn-2 btn"
+                          disabled={tickedIds.length === 0}
+                          data-tip="Opens the ticked businesses' websites in a real browser and writes what is wrong with each page."
+                        >
+                          Read {tickedIds.length > 0 ? `these ${tickedIds.length}` : "the ticked"}
+                        </button>
+                      </ActionRow>
+
+                      <ActionRow
+                        title="Buy extra data"
+                        what="Their Google listing, their Instagram, whether they are running ads. The next screen prices every source before anything is spent."
+                        cost="priced on the next screen"
+                        who="nothing is spent here"
+                        off={
+                          tickedIds.length === 0 ? (
+                            <>
+                              Switched off because nothing is ticked. Close this, tick businesses in
+                              step 2, then press <strong>Choose what to do</strong> again.
+                            </>
+                          ) : undefined
+                        }
+                      >
+                        <button
+                          type="submit"
+                          form="lead-table"
+                          className="btn"
+                          disabled={tickedIds.length === 0}
+                          data-tip="Opens the confirm screen with the rows you ticked. Nothing is bought until you confirm there."
+                        >
+                          For the {tickedIds.length > 0 ? tickedIds.length : "ticked"}
+                        </button>
+                        {view !== "unanalysed" && (
+                          <button
+                            type="submit"
+                            form="lead-table"
+                          formAction={getPaidDataForFiltered}
+                            className="btn-2 btn"
+                            data-tip="Opens the confirm screen with every business your filters are showing, ticked or not."
+                          >
+                            For all {shown.length} shown
+                          </button>
+                        )}
+                      </ActionRow>
+
+                      <div style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--ink-3)", marginTop: 6 }}>
+                        For your whole list, ticked or not
+                      </div>
+                      {WHOLE_LIST_JOBS.map((job) => (
+                        <ActionRow
+                          key={job.title}
+                          title={job.title}
+                          what={job.what}
+                          cost={job.cents === 0 ? "Free" : `${job.cents}¢ a site`}
+                          who={job.platform}
+                        >
+                          <form action={job.action}>
+                            <button className="btn-2 btn" type="submit" data-tip={job.tip}>
+                              {job.button}
+                            </button>
+                          </form>
+                        </ActionRow>
+                      ))}
+
+                      <ActionRow title="Download them" what="A spreadsheet of everything the filters are showing, with every column." cost="Free" who="—">
+                        <a
+                          href={`/records/export${href(current, {}).replace("/records", "")}`}
+                          className="btn-2 btn"
+                          style={{ textDecoration: "none" }}
+                        >
+                          Download {shown.length} as CSV
+                        </a>
+                      </ActionRow>
+
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", lineHeight: 1.5 }}>
+                        Spent so far <strong style={{ color: "var(--ink)" }}>${(spentCents / 100).toFixed(2)}</strong>{" "}
+                        on paid lookups altogether. Reading websites, the checks and the scoring cost
+                        nothing. <Link href="/spend">What each thing costs</Link>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

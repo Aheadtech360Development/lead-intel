@@ -21,18 +21,27 @@ export interface LeadFilters {
   website?: string;
   from?: string;
   batch?: string;
-  category?: string;
-  subcategory?: string;
+  icp?: string;
   rule?: string;
   ads?: string;
   minFollowers?: string;
   q?: string;
   claimed?: string;
+  /**
+   * Google reviews. "50" means at least fifty; "none" means a listing that has been looked up and
+   * has none at all.
+   *
+   * A business whose listing nobody has bought has no answer here, and an unanswerable filter
+   * refuses rather than passes — the same rule an ICP's conditions follow.
+   */
+  reviews?: string;
+  /** A town or state, matched loosely against both, because that is how an operator says a place. */
+  where?: string;
 }
 
 /** The columns every filter needs. Kept here so a new filter cannot forget to select its column. */
 export const LEAD_COLUMNS =
-  "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, category, subcategory, category_rule_id, scored_at";
+  "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, icp_name, icp_id, scored_at";
 
 export interface LeadRow {
   id: string;
@@ -47,9 +56,8 @@ export interface LeadRow {
   passed_gate: boolean | null;
   origin: string | null;
   import_batch_id: string | null;
-  category: string | null;
-  subcategory: string | null;
-  category_rule_id: string | null;
+  icp_name: string | null;
+  icp_id: string | null;
   scored_at: string | null;
 }
 
@@ -89,9 +97,8 @@ export function matchesFilters(
     | "passed_gate"
     | "origin"
     | "import_batch_id"
-    | "category"
-    | "subcategory"
-    | "category_rule_id"
+    | "icp_name"
+    | "icp_id"
     | "scored_at"
   >,
   filters: LeadFilters,
@@ -104,7 +111,7 @@ export function matchesFilters(
 
   const needle = (filters.q ?? "").trim().toLowerCase();
   if (needle.length > 0) {
-    const hay = [business.display_name, business.city, business.state, business.category, business.subcategory];
+    const hay = [business.display_name, business.city, business.state, business.icp_name];
     if (!hay.some((f) => typeof f === "string" && f.toLowerCase().includes(needle))) return false;
   }
 
@@ -117,9 +124,8 @@ export function matchesFilters(
   if (filters.website && business.website_status !== filters.website) return false;
   if (filters.from && business.origin !== filters.from) return false;
   if (filters.batch && business.import_batch_id !== filters.batch) return false;
-  if (filters.category && business.category !== filters.category) return false;
-  if (filters.subcategory && business.subcategory !== filters.subcategory) return false;
-  if (filters.rule && business.category_rule_id !== filters.rule) return false;
+  if (filters.icp && business.icp_name !== filters.icp) return false;
+  if (filters.rule && business.icp_id !== filters.rule) return false;
 
   if (filters.ads) {
     const running = context.social.get(business.id)?.adsRunning ?? null;
@@ -131,6 +137,20 @@ export function matchesFilters(
   if (filters.minFollowers) {
     const followers = context.social.get(business.id)?.followers ?? null;
     if (followers === null || followers < Number(filters.minFollowers)) return false;
+  }
+
+  if (filters.reviews) {
+    const reviews = context.social.get(business.id)?.reviews ?? null;
+    if (reviews === null) return false;
+    if (filters.reviews === "none") {
+      if (reviews !== 0) return false;
+    } else if (reviews < Number(filters.reviews)) return false;
+  }
+
+  if (filters.where) {
+    const wanted = filters.where.trim().toLowerCase();
+    const where = [business.city, business.state].filter(Boolean).join(", ").toLowerCase();
+    if (wanted.length > 0 && !where.includes(wanted)) return false;
   }
 
   return true;

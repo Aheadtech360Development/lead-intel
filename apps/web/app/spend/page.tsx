@@ -2,7 +2,7 @@ import { ENRICHMENT_DEFINITIONS, ENRICHMENT_ORDER } from "@lead-intel/shared";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
-import { AppShell, Badge, InfoBox, Money, Note, Panel, SectionHeading, StatCard, TD, Th } from "../ui";
+import { AppShell, Badge, InfoBox, Money, Note, Panel, SectionHeading, StatCard, TD, Th, StageStrip } from "../ui";
 
 /**
  * What every kind of data costs, what is free, and what has actually been spent.
@@ -39,7 +39,7 @@ const FREE_SOURCES: { name: string; what: string; icon: string }[] = [
   },
   {
     icon: "🏷️",
-    name: "Your category rules",
+    name: "Your ICPs",
     what: "Sorting every business by rules you wrote. Reads text already stored, so changing a rule and re-applying costs nothing.",
   },
   {
@@ -86,6 +86,7 @@ export default async function SpendPage() {
         </>
       }
     >
+      <StageStrip current="enrichment" />
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
         <StatCard
           icon="💳"

@@ -10,7 +10,7 @@ function result(over: Partial<ChecklistRule> & { outcome?: ChecklistResult["outc
       id: "r1",
       name: "Phone in the header",
       pageType: null,
-      category: null,
+      industry: null,
       field: "header.phone",
       test: "present",
       value: null,

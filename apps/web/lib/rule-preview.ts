@@ -1,4 +1,4 @@
-import { matchCategory, type CategoryEvidence, type CategoryRule } from "@lead-intel/core";
+import { matchIcp, type IcpEvidence, type Icp } from "@lead-intel/core";
 import type { createClient } from "@/lib/supabase/server";
 
 /**
@@ -11,7 +11,7 @@ import type { createClient } from "@/lib/supabase/server";
  * The answer is not to trust whoever wrote the words. It is to **show the result before saving**.
  * A rule containing "shop" will catch 187 of 330 businesses, and no amount of reasoning about the
  * word conveys that as well as the number does. This runs the exact matcher the real pass uses —
- * `matchCategory` from packages/core, the same function, not a similar one — over the evidence
+ * `matchIcp` from packages/core, the same function, not a similar one — over the evidence
  * already stored, so what the preview says and what Apply does cannot drift apart.
  *
  * Free. Reads stored text and matches strings; no crawl, no provider, no model.
@@ -40,7 +40,7 @@ const SAMPLE = 25;
 
 export async function previewRule(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  draft: CategoryRule,
+  draft: Icp,
 ): Promise<RulePreview> {
   const groups = [draft.anyOf, draft.websiteAnyOf, draft.instagramAnyOf].filter((g) => g.length > 0);
   const gated = draft.minFollowers !== null || draft.maxFollowers !== null;
@@ -58,7 +58,7 @@ export async function previewRule(
   const [{ data: businessRows }, { data: fieldRows }, { data: keyRows }, { data: ruleRows }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id, display_name, category, subcategory, category_rule_id")
+      .select("id, display_name, icp_name, icp_id")
       .eq("status", "active")
       .limit(20000),
     supabase
@@ -74,7 +74,7 @@ export async function previewRule(
       ])
       .limit(100000),
     supabase.from("identity_keys").select("business_id, key_value").eq("key_type", "domain").limit(50000),
-    supabase.from("category_rules").select("id, name").limit(500),
+    supabase.from("icps").select("id, name").limit(500),
   ]);
 
   const ruleNames = new Map((ruleRows ?? []).map((r) => [r.id as string, r.name as string]));
@@ -82,11 +82,11 @@ export async function previewRule(
   // Same shape as apps/jobs' gatherEvidence: fields arrive as rows and are folded into one bag per
   // business. Kept here rather than imported because that one speaks Drizzle to the database
   // directly and this runs through the operator's own session, where RLS applies.
-  const evidence = new Map<string, CategoryEvidence>();
-  const bag = (id: string): CategoryEvidence => {
+  const evidence = new Map<string, IcpEvidence>();
+  const bag = (id: string): IcpEvidence => {
     const found = evidence.get(id);
     if (found) return found;
-    const fresh: CategoryEvidence = {};
+    const fresh: IcpEvidence = {};
     evidence.set(id, fresh);
     return fresh;
   };
@@ -125,11 +125,11 @@ export async function previewRule(
   let total = 0;
 
   for (const b of businessRows ?? []) {
-    const facts: CategoryEvidence = { businessName: b.display_name, ...(evidence.get(b.id) ?? {}) };
+    const facts: IcpEvidence = { businessName: b.display_name, ...(evidence.get(b.id) ?? {}) };
     // The draft alone, not the whole ordered set. The question this answers is "what does *this*
     // rule reach", which is what the operator is editing; where it lands once the others are in
     // play is the `stolenFrom` number below.
-    const hit = matchCategory([draft], facts);
+    const hit = matchIcp([draft], facts);
     if (!hit) continue;
 
     total += 1;
@@ -143,7 +143,7 @@ export async function previewRule(
       });
     }
 
-    const owner = b.category_rule_id as string | null;
+    const owner = b.icp_id as string | null;
     if (owner && owner !== draft.id) {
       const name = ruleNames.get(owner) ?? "another rule";
       stolen.set(name, (stolen.get(name) ?? 0) + 1);

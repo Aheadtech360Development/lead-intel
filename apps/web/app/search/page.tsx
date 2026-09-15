@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { AppShell, Banner, Note, PANEL, Panel } from "../ui";
+import { createClient } from "@/lib/supabase/server";
+import { AppShell, Banner, Note, PANEL, Panel, StageStrip } from "../ui";
 
 /**
  * Pipeline Stage 0 ("Plan"). A plain GET form so the values appear in /search/confirm's URL and
@@ -58,6 +59,21 @@ export default async function NewSearchPage({
   // the page still needs no client-side JavaScript at all.
   const { niche = "", location = "", error } = await searchParams;
 
+  // The ICPs, with the words each one is searched for. Ordered the way they are checked, so the
+  // list here reads the same as the list on the ICPs screen.
+  const supabase = await createClient();
+  const { data: icpRows } = await supabase
+    .from("icps")
+    .select("id, name, search_terms")
+    .eq("enabled", true)
+    .order("priority")
+    .order("created_at");
+  const icps = (icpRows ?? []).filter((r) => ((r.search_terms ?? []) as string[]).length > 0);
+  // Kept apart so the page can say *why* an ICP cannot be picked, rather than hiding the whole
+  // choice — which is what it did, and which left the operator looking at a screen with no ICP on
+  // it at all and no idea one was meant to be there.
+  const icpsWithoutWords = (icpRows ?? []).filter((r) => ((r.search_terms ?? []) as string[]).length === 0);
+
   const pill: React.CSSProperties = {
     padding: "5px 11px",
     fontSize: 15,
@@ -74,21 +90,70 @@ export default async function NewSearchPage({
       autoRefresh={false}
       current="search"
       title="Find businesses"
-      what="Pick a type of business and a place. We search Google Maps across a grid of points, remove the duplicates, then visit every website we find and analyse it for free. The next screen shows any cost before a penny is spent."
+      what="Search Google Maps for one of your ICPs, or for a word of your own. The next screen shows the cost before anything is spent."
     >
 
       <>
+        <StageStrip current="sourcing" />
         {/* A search that could not be started said so only on the run's own status page, which is
             not where the operator is looking after pressing the button. */}
         {error ? <Banner tone="bad">{decodeURIComponent(error)}</Banner> : null}
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.1fr)", gap: 22, alignItems: "start" }}>
           <form action="/search/confirm" method="get" style={{ ...PANEL, padding: 22 }}>
+            {/*
+              An ICP already holds the words this kind of customer is searched for, so the search
+              starts from one rather than from a blank box. The words are searched one after
+              another, each as its own run — that is how "one ICP, several searches" is expressed
+              without inventing a new kind of run.
+
+              The text box below stays, for a word that belongs to no ICP yet. Whichever of the two
+              is filled in is the one that decides, and the cost screen says which it read.
+            */}
             <div className="field">
-              <label htmlFor="niche">What kind of business?</label>
-              <input id="niche" name="niche" type="text" required placeholder="e.g. plumber" defaultValue={niche} />
+              <label htmlFor="icp">Search for one of your ICPs</label>
+              <select
+                id="icp"
+                name="icp"
+                defaultValue=""
+                disabled={icps.length === 0}
+                style={{ width: "100%", minHeight: 46, padding: "10px 12px", fontSize: 16, borderRadius: 8, border: "1px solid var(--rule)", background: "var(--surface)" }}
+              >
+                <option value="">
+                  {icps.length === 0 ? "— none of your ICPs has search words yet —" : "— none, I will type a word myself —"}
+                </option>
+                {icps.map((icp) => (
+                  <option key={icp.id} value={icp.id}>
+                    {icp.name} — {(icp.search_terms as string[]).join(", ")}
+                  </option>
+                ))}
+                {icpsWithoutWords.map((icp) => (
+                  <option key={icp.id} value={`no-words-${icp.id}`} disabled>
+                    {icp.name} — no search words yet
+                  </option>
+                ))}
+              </select>
               <p style={{ color: "var(--ink-3)", fontSize: 14.5, margin: "4px 0 0" }}>
-                Type it the way a customer would search. Pick one from the right if you are unsure.
+                {icps.length === 0 ? (
+                  <>
+                    An ICP is searched with the words you give it for Google Maps.{" "}
+                    <Link href="/icps">Add words to an ICP</Link> and it appears here — until then, type
+                    one word below.
+                  </>
+                ) : (
+                  <>
+                    Every word in the ICP is searched, one run each. <Link href="/icps">Edit your ICPs</Link> to
+                    change the words.
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="field">
+              <label htmlFor="niche">Or one word of your own</label>
+              <input id="niche" name="niche" type="text" placeholder="e.g. plumber" defaultValue={niche} />
+              <p style={{ color: "var(--ink-3)", fontSize: 14.5, margin: "4px 0 0" }}>
+                Type it the way a customer would search. Ignored when an ICP is chosen above.
               </p>
             </div>
 

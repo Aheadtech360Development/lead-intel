@@ -56,8 +56,8 @@ export async function analyseUnscored(formData: FormData): Promise<void> {
   try {
     // Categorised as well as analysed, so this button leaves a business in the same state an import
     // or a search would. It reads stored text and costs nothing, and a business that has just been
-    // read for the first time is exactly the one whose category was previously unknowable.
-    const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", { businessIds, categoriseAll: true, jobRunId });
+    // read for the first time is exactly the one whose ICP was previously unknowable.
+    const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", { businessIds, matchAllIcps: true, jobRunId });
     await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
@@ -74,7 +74,7 @@ export async function analyseUnscored(formData: FormData): Promise<void> {
   redirect(
     `${back}${back.includes("?") ? "&" : "?"}bought=${encodeURIComponent(
       "Analysis started. Their websites are being read now, then measured for speed, then scored, " +
-        "then sorted into your categories — it costs nothing. Refresh this page in a few minutes; " +
+        "then matched to your ICPs — it costs nothing. Refresh this page in a few minutes; " +
         "the “Couldn’t be scored” number will fall as they finish.",
     )}`,
   );
@@ -96,10 +96,10 @@ export async function refreshWebsiteText(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   if (typeof claimsData?.claims?.sub !== "string") {
-    redirect(`/categories?error=${encodeURIComponent("You are not signed in.")}`);
+    redirect(`/icps?error=${encodeURIComponent("You are not signed in.")}`);
   }
 
-  const back = String(formData.get("back") ?? "/categories");
+  const back = String(formData.get("back") ?? "/icps");
 
   const jobRunId = await startJobRun(supabase, {
     kind: "analyse-run",
@@ -123,8 +123,8 @@ export async function refreshWebsiteText(formData: FormData): Promise<void> {
       refreshMissingField: "site_text",
       // Sorted afterwards, because the whole reason for re-reading is that the rules had nothing to
       // read. Re-reading and then not re-sorting would leave the operator looking at the same empty
-      // categories and concluding the crawl had not worked.
-      categoriseAll: true,
+      // ICPs and concluding the crawl had not worked.
+      matchAllIcps: true,
     });
     await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {

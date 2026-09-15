@@ -1,33 +1,33 @@
 import { createDbClient } from "@lead-intel/db";
 import { logger, task } from "@trigger.dev/sdk";
 import { jobProgress } from "../src/job-progress.js";
-import { categoriseAll } from "../src/categorise.js";
+import { matchAllIcps } from "../src/match-icps.js";
 
 /**
- * Re-sorts every business through the operator's current category rules.
+ * Works out again which ICP every business is.
  *
- * Free, and safe to run as often as the rules change — it reads text already stored and writes a
- * category. That is the point: editing a rule and seeing the result is meant to be a loop tight
- * enough to actually use, not a batch job somebody schedules.
+ * Free, and safe to run as often as the ICPs change — it reads facts already stored and writes a
+ * name. That is the point: editing an ICP and seeing the result is meant to be a loop tight enough
+ * to actually use, not a batch job somebody schedules.
  */
-export const categoriseRunTask = task({
-  id: "categorise-run",
+export const matchIcpsRunTask = task({
+  id: "match-icps-run",
   maxDuration: 900,
   run: async (payload: { businessIds?: string[]; jobRunId?: string | null }) => {
     const db = createDbClient();
-    // An import passes the rows it created; the Categories screen passes nothing and means
-    // everything. Both are the same pass over the same rules — only the scope differs.
+    // An import passes the rows it created; the ICPs screen passes nothing and means everything.
+    // Both are the same pass over the same ICPs — only the scope differs.
     const progress = jobProgress(db, payload.jobRunId);
 
     try {
-      await progress.say("Applying every rule to every business");
+      await progress.say("Matching every business against your ICPs");
 
-      const summary = await categoriseAll(db, payload.businessIds);
-      logger.info("categorised", { ...summary, scoped: (payload.businessIds ?? []).length > 0 });
+      const summary = await matchAllIcps(db, payload.businessIds);
+      logger.info("matched icps", { ...summary, scoped: (payload.businessIds ?? []).length > 0 });
 
       await progress.finish({
         ok: true,
-        detail: `Sorted ${summary.categorised} into a category, cleared ${summary.cleared}, and ${summary.unmatched} matched no rule at all.`,
+        detail: `Put ${summary.matched} into an ICP, cleared ${summary.cleared}, and ${summary.unmatched} matched no ICP at all.`,
       });
       return summary;
     } catch (err) {

@@ -48,7 +48,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
   const [{ data: businessRows }, { data: fieldRows }, { data: batchRows }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("id, display_name, city, state, tier, problem_score, route, origin, import_batch_id, category, subcategory")
+      .select("id, display_name, city, state, tier, problem_score, route, origin, import_batch_id, icp_name")
       .eq("status", "active")
       .limit(5000),
     supabase
@@ -90,8 +90,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
     problem: number | null;
     origin: string;
     batch: string | null;
-    myCategory: string | null;
-    mySub: string | null;
+    myIcp: string | null;
     url: string | null;
     handle: string | null;
     followers: number | null;
@@ -118,8 +117,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
       problem: b.problem_score === null ? null : Number(b.problem_score),
       origin: b.origin ?? "discovered",
       batch: b.import_batch_id,
-      myCategory: b.category,
-      mySub: b.subcategory,
+      myIcp: b.icp_name,
       url: f.instagram_url ?? null,
       handle: f.instagram_handle ?? null,
       followers: followers !== null && Number.isFinite(followers) ? followers : null,
@@ -161,8 +159,8 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
     }
     if (f.mine && f.mine !== "all") {
       if (f.mine === "none") {
-        if (r.myCategory) return false;
-      } else if (r.myCategory !== f.mine) return false;
+        if (r.myIcp) return false;
+      } else if (r.myIcp !== f.mine) return false;
     }
     if (f.ads && f.ads !== "all") {
       if (f.ads === "yes" && r.adsRunning !== "true") return false;
@@ -209,7 +207,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
   }
 
   const igCategories = [...new Set(pool.map((r) => r.igCategory).filter((c): c is string => Boolean(c)))].sort();
-  const myCategories = [...new Set(pool.map((r) => r.myCategory).filter((c): c is string => Boolean(c)))].sort();
+  const myIcps = [...new Set(pool.map((r) => r.myIcp).filter((c): c is string => Boolean(c)))].sort();
 
   const sort = params.sort ?? "followers";
   const sorted = [...shown].sort((a, b) => {
@@ -315,7 +313,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
               <strong>{formatCents(ENRICHMENT_DEFINITIONS.instagram_profile.costCents * linked.length)}</strong>. It
               fills in the follower count, Instagram&rsquo;s own category, the bio and the link in it —
               which then feeds your{" "}
-              <Link href="/categories">category rules</Link>, so a rule can say &ldquo;their website
+              <Link href="/icps">ICPs</Link>, so a rule can say &ldquo;their website
               sells printing <em>and</em> Instagram calls them a clothing brand&rdquo;.
             </p>
             <p style={{ margin: 0 }}>
@@ -369,10 +367,10 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
               </FilterSection>
             )}
 
-            {myCategories.length > 0 && (
-              <FilterSection title="Your category" hint="From your own rules, not Instagram’s.">
+            {myIcps.length > 0 && (
+              <FilterSection title="Your ICP" hint="From your own ICPs, not Instagram’s categories.">
                 <FilterOption label="Any" count={pool.length} href={href({ mine: "" })} active={!current.mine} />
-                {myCategories.map((c) => (
+                {myIcps.map((c) => (
                   <FilterOption
                     key={c}
                     label={c}
@@ -496,7 +494,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                         <Th label="Followers" explain="Blank = never looked up" width={110} />
                         <Th label="Posts" width={80} />
                         <Th label="Instagram’s category" width={160} />
-                        <Th label="Your category" width={170} />
+                        <Th label="Your ICP" width={170} />
                         <Th label="Ads" width={90} />
                         <Th label="Lead" explain="Priority from the website score" width={80} />
                       </tr>
@@ -552,10 +550,9 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                             {r.igCategory ?? <span style={{ color: "var(--ink-3)" }}>—</span>}
                           </td>
                           <td style={{ ...TD, fontSize: 15 }}>
-                            {r.myCategory ? (
+                            {r.myIcp ? (
                               <>
-                                {r.myCategory}
-                                {r.mySub ? <span style={{ color: "var(--ink-3)" }}> › {r.mySub}</span> : null}
+                                {r.myIcp}
                               </>
                             ) : (
                               <span style={{ color: "var(--ink-3)" }}>not sorted</span>
@@ -613,7 +610,7 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
                 publishes a count and never the names, so &ldquo;which well-known accounts follow
                 them&rdquo; is not for sale anywhere. Nor is a second category level: Instagram gives
                 one word, which is exactly why{" "}
-                <Link href="/categories">your own rules</Link> exist.
+                <Link href="/icps">your own rules</Link> exist.
               </p>
               <p style={{ margin: 0 }}>
                 <strong>Ads:</strong> whether they are running any, and since when — but never how

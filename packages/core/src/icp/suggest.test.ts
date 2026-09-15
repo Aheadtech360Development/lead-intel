@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchCategory } from "./match.js";
+import { matchIcp } from "./match.js";
 import { buildSuggestRulePrompt, parseSuggestedRule, riskyTerms, suggestedRuleToDraft } from "./suggest.js";
 
 /**
@@ -12,8 +12,8 @@ import { buildSuggestRulePrompt, parseSuggestedRule, riskyTerms, suggestedRuleTo
 
 const GOOD = {
   name: "Own-label apparel",
-  category: "Fashion",
-  subcategory: "Apparel brand",
+  industry: "Fashion",
+  searchTerms: ["custom apparel", "clothing brand"],
   anyOf: [],
   websiteAnyOf: ["gang sheet", "we print"],
   instagramAnyOf: ["clothing brand"],
@@ -32,7 +32,8 @@ describe("parseSuggestedRule", () => {
     if (!parsed.ok) return;
     expect(parsed.rule.websiteAnyOf).toEqual(["gang sheet", "we print"]);
     expect(parsed.rule.requireAll).toBe(true);
-    expect(parsed.rule.subcategory).toBe("Apparel brand");
+    expect(parsed.rule.industry).toBe("Fashion");
+    expect(parsed.rule.searchTerms).toEqual(["custom apparel", "clothing brand"]);
   });
 
   it("refuses a rule with no words and no follower range", () => {
@@ -42,9 +43,9 @@ describe("parseSuggestedRule", () => {
     expect(parsed.detail).toContain("never match");
   });
 
-  it("refuses an answer with no category", () => {
-    expect(parseSuggestedRule({ ...GOOD, category: "" }).ok).toBe(false);
-    expect(parseSuggestedRule({ ...GOOD, category: 7 }).ok).toBe(false);
+  it("refuses an answer with no industry", () => {
+    expect(parseSuggestedRule({ ...GOOD, industry: "" }).ok).toBe(false);
+    expect(parseSuggestedRule({ ...GOOD, industry: 7 }).ok).toBe(false);
   });
 
   it("refuses anything that is not an object", () => {
@@ -100,7 +101,7 @@ describe("parseSuggestedRule", () => {
 
 /** A draft is only useful if the real matcher accepts it. This is the join between the two. */
 describe("suggestedRuleToDraft", () => {
-  it("produces something matchCategory can run unchanged", () => {
+  it("produces something matchIcp can run unchanged", () => {
     const parsed = parseSuggestedRule(GOOD);
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
@@ -108,14 +109,14 @@ describe("suggestedRuleToDraft", () => {
     const draft = suggestedRuleToDraft(parsed.rule, 10);
     expect(draft.priority).toBe(10);
 
-    const hit = matchCategory([draft], {
+    const hit = matchIcp([draft], {
       websiteText: "we print gang sheet transfers daily",
       instagramCategory: "Clothing brand",
     });
-    expect(hit?.category).toBe("Fashion");
+    expect(hit?.industry).toBe("Fashion");
 
     // requireAll survives the round trip: the website half alone must not be enough.
-    expect(matchCategory([draft], { websiteText: "we print gang sheet transfers daily" })).toBeNull();
+    expect(matchIcp([draft], { websiteText: "we print gang sheet transfers daily" })).toBeNull();
   });
 });
 
@@ -140,7 +141,7 @@ describe("buildSuggestRulePrompt", () => {
   it("carries the description and the existing categories", () => {
     const prompt = buildSuggestRulePrompt({
       description: "brands that print their own clothes",
-      existingRules: [{ name: "DTF transfers", category: "Printing", subcategory: "DTF transfers" }],
+      existingRules: [{ name: "DTF transfers", industry: "Printing" }],
     });
     expect(prompt).toContain("print their own clothes");
     expect(prompt).toContain("DTF transfers");

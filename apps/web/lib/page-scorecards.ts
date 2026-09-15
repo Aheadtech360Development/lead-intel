@@ -56,7 +56,7 @@ export interface PageScorecard {
 export async function loadScorecards(
   supabase: Awaited<ReturnType<typeof createClient>>,
   businessId: string,
-  category: string | null,
+  industry: string | null,
 ): Promise<PageScorecard[]> {
   const [{ data: audits }, { data: rules }] = await Promise.all([
     supabase
@@ -73,7 +73,7 @@ export async function loadScorecards(
     id: r.id,
     name: r.name,
     pageType: r.page_type,
-    category: r.category,
+    industry: r.industry,
     field: r.field,
     test: r.test,
     value: r.value,
@@ -97,7 +97,7 @@ export async function loadScorecards(
 
     const results = runChecklist(checklist, {
       pageType: audit.page_type as PageType,
-      category,
+      industry,
       structure,
       layout,
     });

@@ -56,7 +56,7 @@ export async function saveChecklistRule(formData: FormData): Promise<void> {
   const row = {
     name,
     page_type: String(formData.get("pageType") ?? "") || null,
-    category: String(formData.get("category") ?? "").trim() || null,
+    industry: String(formData.get("industry") ?? "").trim() || null,
     field,
     test,
     value: needsNumber ? value : null,
@@ -98,7 +98,7 @@ export async function addExampleChecklists(): Promise<void> {
       created_by: userId,
       name: r.name,
       page_type: r.pageType,
-      category: r.category,
+      industry: r.industry,
       field: r.field,
       test: r.test,
       value: r.value,

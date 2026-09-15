@@ -236,15 +236,15 @@ export const businesses = pgTable(
     /** Which uploaded file, for `origin = 'imported'`. Null everywhere else. */
     importBatchId: uuid("import_batch_id"),
 
-    // ---- The operator's own category, assigned by their rules (see category_rules) ----
-    category: text("category"),
-    subcategory: text("subcategory"),
+    // ---- Which of the operator's ICPs this business is, decided by their rules (see icps) ----
+    /** The ICP's name, copied here so the list can filter and sort on it without a join. */
+    icpName: text("icp_name"),
     /**
-     * Which rule decided. Null means no rule matched, or the rule that matched has been deleted —
-     * both of which mean the category should be re-evaluated rather than trusted.
+     * Which ICP decided. Null means none of them matched, or the one that did has been deleted —
+     * both of which mean the answer should be worked out again rather than trusted.
      */
-    categoryRuleId: uuid("category_rule_id"),
-    categorisedAt: timestamp("categorised_at", { withTimezone: true }),
+    icpId: uuid("icp_id"),
+    icpMatchedAt: timestamp("icp_matched_at", { withTimezone: true }),
 
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -599,21 +599,23 @@ export const mergeSnapshotsRelations = relations(mergeSnapshots, ({ one }) => ({
   loser: one(businesses, { fields: [mergeSnapshots.loserId], references: [businesses.id] }),
 }));
 
-// ---------- category_rules ----------
-// The operator's own taxonomy. Instagram publishes exactly one category per account and no second
-// level, so "t-shirts, within fashion" cannot be fetched from anywhere — it has to be decided.
-// These rules decide it, in priority order, first match wins, and `businesses.category_rule_id`
-// records which one did so the answer can always be traced back to a rule someone wrote.
+// ---------- icps ----------
+// Who the operator actually wants to sell to. One ICP holds both halves of that: the words it is
+// searched for on Google Maps, and the words and conditions that decide whether a business already
+// in the list is one. Instagram publishes exactly one category per account and no second level, so
+// none of this can be fetched from anywhere — it has to be decided.
+//
+// Checked in priority order, first match wins, and `businesses.icp_id` records which ICP decided,
+// so the answer can always be traced back to something someone wrote.
 
-export const categoryRules = pgTable(
-  "category_rules",
+export const icps = pgTable(
+  "icps",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     createdBy: uuid("created_by").notNull(), // references auth.users(id) — Supabase-managed
 
     name: text("name").notNull(),
-    category: text("category").notNull(),
-    subcategory: text("subcategory"),
+    industry: text("industry").notNull(),
 
     /** Lower runs first. The operator controls the order, so overlapping rules resolve visibly. */
     priority: integer("priority").notNull().default(100),
@@ -639,11 +641,28 @@ export const categoryRules = pgTable(
     minFollowers: integer("min_followers"),
     maxFollowers: integer("max_followers"),
 
+    /**
+     * What Find businesses searches Google Maps with for this ICP. Several words, because one kind
+     * of customer is described by several searches — and writing them here is what lets an ICP be
+     * written once and then used for both sourcing and filtering.
+     *
+     * Empty means this ICP is never sourced, only matched against businesses already in the list.
+     */
+    searchTerms: text("search_terms").array().notNull().default(sql`'{}'`),
+
+    /**
+     * Conditions. Empty or null means this ICP does not ask — never that the answer is no. A
+     * business whose reviews were never looked up cannot pass a gate about reviews, so it does not.
+     */
+    requiresWebsite: boolean("requires_website").notNull().default(false),
+    minReviews: integer("min_reviews"),
+    places: text("places").array().notNull().default(sql`'{}'`),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    orderIdx: index("category_rules_order_idx").on(table.enabled, table.priority, table.createdAt),
+    orderIdx: index("icps_order_idx").on(table.enabled, table.priority, table.createdAt),
   }),
 );
 
@@ -771,8 +790,8 @@ export const pageChecklists = pgTable("page_checklists", {
   name: text("name").notNull(),
   /** Null means every page type. */
   pageType: text("page_type"),
-  /** Null means every category. A rule for florists should not judge a print shop. */
-  category: text("category"),
+  /** Null means every industry. A rule for florists should not judge a print shop. */
+  industry: text("industry"),
 
   field: text("field").notNull(),
   test: text("test").notNull(),

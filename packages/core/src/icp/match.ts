@@ -1,16 +1,23 @@
 /**
- * Sorting a business into a category the operator defined.
+ * Deciding which of the operator's ICPs a business is.
  *
- * Instagram publishes one category per account and no second level, so "t-shirts, within fashion"
- * cannot be fetched from anywhere — it has to be decided. This decides it from rules the operator
- * writes, and records **which rule decided**, because a category nobody can trace is a category
- * nobody should act on.
+ * An ICP is the operator's own description of a customer they want. Instagram publishes one
+ * category per account and no second level, so "t-shirts, within fashion" cannot be fetched from
+ * anywhere — it has to be decided. This decides it from ICPs the operator writes, and records
+ * **which ICP decided**, because an answer nobody can trace is an answer nobody should act on.
  *
- * Pure: no database, no network. The caller gathers the text, this reads it.
+ * Two kinds of question live in an ICP and both are asked here:
+ *   • words — what their own text has to say
+ *   • conditions — followers, reviews, a working website, where they are
+ *
+ * A condition that cannot be answered never passes. "At least 20 reviews" must not fire on a
+ * business whose listing was never looked up: that would be a claim about a number nobody has.
+ *
+ * Pure: no database, no network. The caller gathers the facts, this reads them.
  */
 
 /** Everything a rule may look at. Each is optional — most businesses have some and not others. */
-export interface CategoryEvidence {
+export interface IcpEvidence {
   businessName?: string | null;
   websiteText?: string | null;
   websiteDomain?: string | null;
@@ -19,9 +26,17 @@ export interface CategoryEvidence {
   instagramHandle?: string | null;
   metaAdsText?: string | null;
   instagramFollowers?: number | null;
+
+  // ---- facts the conditions ask about, as opposed to text the words are looked for in ----
+  /** true: a website was reached. false: there is none, or it could not be reached. Null: never looked. */
+  hasWebsite?: boolean | null;
+  /** How many Google reviews their listing has. Null means their listing was never looked up. */
+  reviewCount?: number | null;
+  city?: string | null;
+  state?: string | null;
 }
 
-export const CATEGORY_SOURCES = [
+export const ICP_SOURCES = [
   "business_name",
   "website_text",
   "website_domain",
@@ -30,10 +45,10 @@ export const CATEGORY_SOURCES = [
   "instagram_handle",
   "meta_ads_text",
 ] as const;
-export type CategorySource = (typeof CATEGORY_SOURCES)[number];
+export type IcpSource = (typeof ICP_SOURCES)[number];
 
 /** What each source is called on screen, so the rule editor never shows a column name. */
-export const CATEGORY_SOURCE_LABELS: Record<CategorySource, string> = {
+export const ICP_SOURCE_LABELS: Record<IcpSource, string> = {
   business_name: "Their business name",
   website_text: "Text on their website",
   website_domain: "Their web address",
@@ -44,15 +59,14 @@ export const CATEGORY_SOURCE_LABELS: Record<CategorySource, string> = {
 };
 
 /** The sources that belong to the business's own website. */
-export const WEBSITE_SOURCES: CategorySource[] = ["website_text", "website_domain"];
+export const WEBSITE_SOURCES: IcpSource[] = ["website_text", "website_domain"];
 /** The sources that belong to their Instagram account. */
-export const INSTAGRAM_SOURCES: CategorySource[] = ["instagram_bio", "instagram_category", "instagram_handle"];
+export const INSTAGRAM_SOURCES: IcpSource[] = ["instagram_bio", "instagram_category", "instagram_handle"];
 
-export interface CategoryRule {
+export interface Icp {
   id: string;
   name: string;
-  category: string;
-  subcategory: string | null;
+  industry: string;
   priority: number;
   enabled: boolean;
   /** Empty means "look everywhere", which is what someone writing their first rule means. */
@@ -76,34 +90,50 @@ export interface CategoryRule {
   requireAll: boolean;
   minFollowers: number | null;
   maxFollowers: number | null;
+
+  /**
+   * What Find businesses searches Google Maps with for this ICP.
+   *
+   * Nothing here takes part in matching — it is the other half of what an ICP is for, kept in the
+   * same row so the words a customer is *found* by and the words they are *recognised* by are
+   * written once, in one place, rather than drifting apart in two screens.
+   */
+  searchTerms: string[];
+
+  /** true: no reachable website means not this ICP, whatever their words say. */
+  requiresWebsite: boolean;
+  /** Fewest Google reviews to count. Null means this ICP does not ask. */
+  minReviews: number | null;
+  /** Towns or states this ICP is limited to. Empty means anywhere. */
+  places: string[];
 }
 
 /** Which group a hit came from, so the record can say *why* rather than only *what*. */
-export type CategoryGroup = "anywhere" | "website" | "instagram" | "followers";
+export type IcpGroup = "anywhere" | "website" | "instagram" | "followers" | "conditions";
 
-export interface CategoryHit {
+export interface IcpHit {
   term: string;
-  source: CategorySource;
-  group: CategoryGroup;
+  source: IcpSource;
+  group: IcpGroup;
 }
 
-export interface CategoryMatch {
-  rule: CategoryRule;
-  category: string;
-  subcategory: string | null;
-  /** The term that matched and where it was found — shown next to the category on the record. */
+export interface IcpMatch {
+  icp: Icp;
+  name: string;
+  industry: string;
+  /** The term that matched and where it was found — shown next to the ICP on the record. */
   matchedTerm: string;
-  matchedIn: CategorySource;
+  matchedIn: IcpSource;
   /**
    * Every group that fired, not only the first.
    *
-   * A rule that required both a website word and an Instagram word is a claim about two things;
-   * showing one of them next to the category would make a conjunction look like a coincidence.
+   * An ICP that required both a website word and an Instagram word is a claim about two things;
+   * showing one of them next to the ICP would make a conjunction look like a coincidence.
    */
-  hits: CategoryHit[];
+  hits: IcpHit[];
 }
 
-function textFor(source: CategorySource, evidence: CategoryEvidence): string | null {
+function textFor(source: IcpSource, evidence: IcpEvidence): string | null {
   switch (source) {
     case "business_name":
       return evidence.businessName ?? null;
@@ -162,7 +192,7 @@ function contains(haystack: string, term: string): boolean {
  * and can see it. A scoring scheme would decide between two rules by arithmetic nobody asked for;
  * an ordered list decides by a number they set.
  */
-export function matchCategory(rules: CategoryRule[], evidence: CategoryEvidence): CategoryMatch | null {
+export function matchIcp(rules: Icp[], evidence: IcpEvidence): IcpMatch | null {
   const ordered = rules
     .filter((rule) => rule.enabled)
     .slice()
@@ -179,15 +209,26 @@ export function matchCategory(rules: CategoryRule[], evidence: CategoryEvidence)
       if (rule.maxFollowers !== null && followers > rule.maxFollowers) continue;
     }
 
+    // The same rule for the other three conditions: an unanswerable one fails rather than passes.
+    if (rule.requiresWebsite && evidence.hasWebsite !== true) continue;
+
+    if (rule.minReviews !== null) {
+      const reviews = evidence.reviewCount;
+      if (reviews === null || reviews === undefined) continue;
+      if (reviews < rule.minReviews) continue;
+    }
+
+    if (rule.places.length > 0 && !inOneOfThesePlaces(rule.places, evidence)) continue;
+
     const sources = (
-      rule.sources.length > 0 ? rule.sources.filter(isCategorySource) : [...CATEGORY_SOURCES]
-    ) as CategorySource[];
+      rule.sources.length > 0 ? rule.sources.filter(isIcpSource) : [...ICP_SOURCES]
+    ) as IcpSource[];
 
     // Exclusions are checked across every source this rule could read — the ones `sources` allows
     // plus both pinned sides — not only the source that matched. "screen printing" excluding
     // "equipment" should not fire for a business whose Instagram bio says screen printing and
     // whose website sells the machines.
-    const everywhereThisRuleReads = new Set<CategorySource>([
+    const everywhereThisRuleReads = new Set<IcpSource>([
       ...sources,
       ...(rule.websiteAnyOf.length > 0 ? WEBSITE_SOURCES : []),
       ...(rule.instagramAnyOf.length > 0 ? INSTAGRAM_SOURCES : []),
@@ -202,30 +243,34 @@ export function matchCategory(rules: CategoryRule[], evidence: CategoryEvidence)
 
     // Each filled-in group, asked separately. An empty group is not a failed group — it is a
     // question this rule does not ask — so it is left out rather than counted either way.
-    const groups: Array<{ group: CategoryGroup; terms: string[]; sources: CategorySource[] }> = [];
+    const groups: Array<{ group: IcpGroup; terms: string[]; sources: IcpSource[] }> = [];
     if (rule.anyOf.length > 0) groups.push({ group: "anywhere", terms: rule.anyOf, sources });
     if (rule.websiteAnyOf.length > 0)
       groups.push({ group: "website", terms: rule.websiteAnyOf, sources: WEBSITE_SOURCES });
     if (rule.instagramAnyOf.length > 0)
       groups.push({ group: "instagram", terms: rule.instagramAnyOf, sources: INSTAGRAM_SOURCES });
 
-    const gated = rule.minFollowers !== null || rule.maxFollowers !== null;
+    const followerGated = rule.minFollowers !== null || rule.maxFollowers !== null;
+    const gated =
+      followerGated || rule.requiresWebsite || rule.minReviews !== null || rule.places.length > 0;
 
-    // A rule with no words at all is only meaningful when a follower gate carries it — "anyone
-    // over 10,000 followers". Without one it would match every business alive.
+    // An ICP with no words at all is only meaningful when a condition carries it — "anyone over
+    // 10,000 followers", "anyone in Texas with 20 reviews". Without one it would match every
+    // business alive.
     if (groups.length === 0) {
       if (!gated) continue;
+      const why = conditionSummary(rule);
       return {
-        rule,
-        category: rule.category,
-        subcategory: rule.subcategory,
-        matchedTerm: "follower count",
+        icp: rule,
+        name: rule.name,
+        industry: rule.industry,
+        matchedTerm: why,
         matchedIn: "instagram_bio",
-        hits: [{ term: "follower count", source: "instagram_bio", group: "followers" }],
+        hits: [{ term: why, source: "instagram_bio", group: followerGated ? "followers" : "conditions" }],
       };
     }
 
-    const hits: CategoryHit[] = [];
+    const hits: IcpHit[] = [];
     for (const g of groups) {
       const hit = firstHit(g.terms, g.sources, evidence, g.group);
       if (hit) hits.push(hit);
@@ -240,11 +285,16 @@ export function matchCategory(rules: CategoryRule[], evidence: CategoryEvidence)
     if (!satisfied) continue;
 
     const first = hits[0]!;
-    if (gated) hits.push({ term: "follower count", source: "instagram_bio", group: "followers" });
+    if (gated)
+      hits.push({
+        term: conditionSummary(rule),
+        source: "instagram_bio",
+        group: followerGated ? "followers" : "conditions",
+      });
     return {
-      rule,
-      category: rule.category,
-      subcategory: rule.subcategory,
+      icp: rule,
+      name: rule.name,
+      industry: rule.industry,
       matchedTerm: first.term,
       matchedIn: first.source,
       hits,
@@ -257,10 +307,10 @@ export function matchCategory(rules: CategoryRule[], evidence: CategoryEvidence)
 /** The first of these terms found in any of these sources, or null if none of them are there. */
 function firstHit(
   terms: string[],
-  sources: CategorySource[],
-  evidence: CategoryEvidence,
-  group: CategoryGroup,
-): CategoryHit | null {
+  sources: IcpSource[],
+  evidence: IcpEvidence,
+  group: IcpGroup,
+): IcpHit | null {
   for (const source of sources) {
     const text = textFor(source, evidence);
     if (text === null || text.trim().length === 0) continue;
@@ -270,8 +320,37 @@ function firstHit(
   return null;
 }
 
-export function isCategorySource(value: string): value is CategorySource {
-  return (CATEGORY_SOURCES as readonly string[]).includes(value);
+export function isIcpSource(value: string): value is IcpSource {
+  return (ICP_SOURCES as readonly string[]).includes(value);
+}
+
+/**
+ * Where a business is, as one string to test the ICP's places against.
+ *
+ * Matched loosely and on both halves, because the operator writes places the way they say them:
+ * "Texas" has to find a business stored as Dallas / TX, and "Dallas" has to find it too.
+ */
+function inOneOfThesePlaces(places: string[], evidence: IcpEvidence): boolean {
+  const where = [evidence.city, evidence.state].filter((part) => part && part.trim().length > 0).join(", ");
+  if (where.length === 0) return false;
+  const normalised = where.toLowerCase();
+  return places.some((place) => {
+    const wanted = place.trim().toLowerCase();
+    return wanted.length > 0 && normalised.includes(wanted);
+  });
+}
+
+/** The conditions an ICP asked about, in the operator's words, for the record to show. */
+function conditionSummary(icp: Icp): string {
+  const parts: string[] = [];
+  if (icp.minFollowers !== null && icp.maxFollowers !== null)
+    parts.push(`${icp.minFollowers.toLocaleString()}–${icp.maxFollowers.toLocaleString()} followers`);
+  else if (icp.minFollowers !== null) parts.push(`${icp.minFollowers.toLocaleString()}+ followers`);
+  else if (icp.maxFollowers !== null) parts.push(`up to ${icp.maxFollowers.toLocaleString()} followers`);
+  if (icp.requiresWebsite) parts.push("has a working website");
+  if (icp.minReviews !== null) parts.push(`${icp.minReviews}+ Google reviews`);
+  if (icp.places.length > 0) parts.push(`in ${icp.places.join(" or ")}`);
+  return parts.length > 0 ? parts.join(", ") : "conditions";
 }
 
 /**
@@ -281,11 +360,10 @@ export function isCategorySource(value: string): value is CategorySource {
  * embroidery — because a generic example teaches nothing about how the fields interact. They are
  * suggestions the operator edits, not defaults the system relies on.
  */
-export const EXAMPLE_CATEGORY_RULES: Omit<CategoryRule, "id" | "enabled">[] = [
+export const EXAMPLE_ICPS: Omit<Icp, "id" | "enabled">[] = [
   {
     name: "DTF transfers",
-    category: "Printing",
-    subcategory: "DTF transfers",
+    industry: "Printing",
     priority: 10,
     sources: [],
     anyOf: ["dtf", "direct to film", "dtf transfer"],
@@ -295,11 +373,14 @@ export const EXAMPLE_CATEGORY_RULES: Omit<CategoryRule, "id" | "enabled">[] = [
     requireAll: false,
     minFollowers: null,
     maxFollowers: null,
+    searchTerms: ["dtf transfers", "dtf printing", "direct to film printing"],
+    requiresWebsite: false,
+    minReviews: null,
+    places: [],
   },
   {
     name: "Screen printing",
-    category: "Printing",
-    subcategory: "Screen printing",
+    industry: "Printing",
     priority: 20,
     sources: [],
     anyOf: ["screen print", "screenprint", "silkscreen", "silk screen"],
@@ -309,11 +390,14 @@ export const EXAMPLE_CATEGORY_RULES: Omit<CategoryRule, "id" | "enabled">[] = [
     requireAll: false,
     minFollowers: null,
     maxFollowers: null,
+    searchTerms: ["screen printing", "silkscreen printing", "custom t-shirt printing"],
+    requiresWebsite: false,
+    minReviews: null,
+    places: [],
   },
   {
     name: "Embroidery",
-    category: "Printing",
-    subcategory: "Embroidery",
+    industry: "Printing",
     priority: 30,
     sources: [],
     anyOf: ["embroider", "embroidery", "monogram"],
@@ -323,11 +407,14 @@ export const EXAMPLE_CATEGORY_RULES: Omit<CategoryRule, "id" | "enabled">[] = [
     requireAll: false,
     minFollowers: null,
     maxFollowers: null,
+    searchTerms: ["embroidery shop", "custom embroidery", "monogramming"],
+    requiresWebsite: false,
+    minReviews: null,
+    places: [],
   },
   {
     name: "Apparel brand",
-    category: "Fashion",
-    subcategory: "Apparel brand",
+    industry: "Fashion",
     priority: 40,
     sources: [],
     anyOf: ["apparel", "clothing", "streetwear", "t-shirt", "tshirt", "tees"],
@@ -337,6 +424,10 @@ export const EXAMPLE_CATEGORY_RULES: Omit<CategoryRule, "id" | "enabled">[] = [
     requireAll: false,
     minFollowers: null,
     maxFollowers: null,
+    searchTerms: ["clothing brand", "streetwear brand", "apparel company"],
+    requiresWebsite: false,
+    minReviews: null,
+    places: [],
   },
   /**
    * The example that exists to show the shape rather than to be kept.
@@ -348,8 +439,7 @@ export const EXAMPLE_CATEGORY_RULES: Omit<CategoryRule, "id" | "enabled">[] = [
    */
   {
     name: "Prints their own brand (website + Instagram)",
-    category: "Fashion",
-    subcategory: "Own-label apparel",
+    industry: "Fashion",
     priority: 50,
     sources: [],
     anyOf: [],
@@ -359,5 +449,9 @@ export const EXAMPLE_CATEGORY_RULES: Omit<CategoryRule, "id" | "enabled">[] = [
     requireAll: true,
     minFollowers: null,
     maxFollowers: null,
+    searchTerms: ["custom apparel", "print shop"],
+    requiresWebsite: false,
+    minReviews: null,
+    places: [],
   },
 ];

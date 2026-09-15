@@ -379,7 +379,7 @@ export async function confirmImport(formData: FormData): Promise<void> {
     try {
       const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", {
         businessIds: plan.analyseWebsites ? touched : [],
-        categoriseIds: plan.applyCategories ? touched : [],
+        matchIcpIds: plan.applyCategories ? touched : [],
         skipAnalysis: !plan.analyseWebsites,
         jobRunId,
       });

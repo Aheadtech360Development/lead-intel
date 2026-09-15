@@ -7,7 +7,7 @@ function rule(over: Partial<ChecklistRule> = {}): ChecklistRule {
     id: "r1",
     name: "Phone in the header",
     pageType: null,
-    category: null,
+    industry: null,
     field: "header.phone",
     test: "present",
     value: null,
@@ -28,7 +28,7 @@ const PAGE = `
 function facts(over: Partial<PageFactsForChecklist> = {}): PageFactsForChecklist {
   return {
     pageType: "home",
-    category: "Printing",
+    industry: "Printing",
     structure: extractStructure(PAGE),
     layout: { scrollsSideways: false, smallTapTargets: 40, brokenImages: 0, phoneAboveFold: true },
     ...over,
@@ -85,14 +85,14 @@ describe("runChecklist", () => {
       expect(runChecklist([rule({ pageType: "home" })], facts({ pageType: "home" }))).toHaveLength(1);
     });
 
-    it("skips a rule meant for a different category", () => {
-      expect(runChecklist([rule({ category: "Fashion" })], facts({ category: "Printing" }))).toHaveLength(0);
+    it("skips a rule meant for a different industry", () => {
+      expect(runChecklist([rule({ industry: "Fashion" })], facts({ industry: "Printing" }))).toHaveLength(0);
     });
 
-    /** A rule with no category is universal — that is where "every page needs one h1" lives. */
-    it("applies a rule with no category to everything", () => {
-      expect(runChecklist([rule({ category: null })], facts({ category: "Fashion" }))).toHaveLength(1);
-      expect(runChecklist([rule({ category: null })], facts({ category: null }))).toHaveLength(1);
+    /** A rule with no industry is universal — that is where "every page needs one h1" lives. */
+    it("applies a rule with no industry to everything", () => {
+      expect(runChecklist([rule({ industry: null })], facts({ industry: "Fashion" }))).toHaveLength(1);
+      expect(runChecklist([rule({ industry: null })], facts({ industry: null }))).toHaveLength(1);
     });
 
     it("skips a rule that is turned off", () => {

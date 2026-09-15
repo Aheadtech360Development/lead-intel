@@ -1,4 +1,4 @@
-import { CATEGORY_SOURCES, type CategoryRule } from "./match.js";
+import { ICP_SOURCES, type Icp } from "./match.js";
 
 /**
  * Turning a sentence the operator typed into a draft rule.
@@ -15,8 +15,9 @@ import { CATEGORY_SOURCES, type CategoryRule } from "./match.js";
 
 export interface SuggestedRule {
   name: string;
-  category: string;
-  subcategory: string | null;
+  industry: string;
+  /** Words to type into Google Maps to find this kind of customer in the first place. */
+  searchTerms: string[];
   anyOf: string[];
   websiteAnyOf: string[];
   instagramAnyOf: string[];
@@ -38,11 +39,15 @@ export interface SuggestedRule {
 
 export const SUGGEST_RULE_SYSTEM = `You help a lead-generation operator turn a description into a keyword rule.
 
-The rule sorts small businesses into the operator's own category. It matches by looking for literal
-words in text the system already holds. It cannot reason, follow links, or infer — it only finds
-words. Your job is to choose the words.
+An ICP is the operator's own description of a customer they want. It does two jobs: it is searched
+for on Google Maps to find such businesses, and it recognises the ones already in the list by
+looking for literal words in text the system already holds. It cannot reason, follow links, or
+infer — it only finds words. Your job is to choose the words for both jobs.
 
-Three separate places to look:
+"searchTerms": what a person would type into Google Maps to find this kind of business — the trade
+as customers name it ("dtf transfers", "embroidery shop"), not a description. 2 to 5 of them.
+
+Three separate places to look for the words that recognise them:
 - "websiteAnyOf": words to look for on the business's own website (page text and web address).
 - "instagramAnyOf": words to look for on their Instagram (bio, username, the category Instagram
   publishes for the account).
@@ -72,8 +77,8 @@ Rules for choosing terms:
 Reply with JSON only, matching exactly this shape:
 {
   "name": "short name for the operator, 2-5 words",
-  "category": "the broad bucket, one or two words",
-  "subcategory": "the narrower label, or null",
+  "industry": "the trade this sits in, one or two words",
+  "searchTerms": [],
   "anyOf": [], "websiteAnyOf": [], "instagramAnyOf": [], "noneOf": [],
   "requireAll": false,
   "minFollowers": null, "maxFollowers": null,
@@ -81,12 +86,12 @@ Reply with JSON only, matching exactly this shape:
   "understood": "one sentence restating what you understood the operator to want"
 }
 
-Every term you put in any box must appear as a key in "reasons".`;
+Every term you put in any box except "searchTerms" must appear as a key in "reasons".`;
 
 /** The operator's description, plus what already exists so the model does not duplicate it. */
 export function buildSuggestRulePrompt(params: {
   description: string;
-  existingRules: Array<{ name: string; category: string; subcategory: string | null }>;
+  existingRules: Array<{ name: string; industry: string }>;
   /** A few real examples of what this operator's businesses actually say. */
   sampleSiteText?: string[];
 }): string {
@@ -94,10 +99,8 @@ export function buildSuggestRulePrompt(params: {
 
   if (params.existingRules.length > 0) {
     lines.push(
-      `\nCategories they already have (do not duplicate these; pick a distinct one unless the description clearly means an existing one):\n` +
-        params.existingRules
-          .map((r) => `- ${r.name}: ${r.category}${r.subcategory ? ` > ${r.subcategory}` : ""}`)
-          .join("\n"),
+      `\nICPs they already have (do not duplicate these; pick a distinct one unless the description clearly means an existing one):\n` +
+        params.existingRules.map((r) => `- ${r.name} (${r.industry})`).join("\n"),
     );
   }
 
@@ -139,9 +142,9 @@ export function parseSuggestedRule(value: unknown): { ok: true; rule: SuggestedR
     return { ok: false, detail: "The model produced a rule with no words in it, which would never match anything." };
   }
 
-  const category = text(raw.category);
-  if (!category) {
-    return { ok: false, detail: "The model did not name a category." };
+  const industry = text(raw.industry);
+  if (!industry) {
+    return { ok: false, detail: "The model did not name an industry." };
   }
 
   // A conjunction of one is not a conjunction. The model is told this, and it still occasionally
@@ -152,9 +155,9 @@ export function parseSuggestedRule(value: unknown): { ok: true; rule: SuggestedR
   return {
     ok: true,
     rule: {
-      name: text(raw.name) || `${category} rule`,
-      category,
-      subcategory: text(raw.subcategory) || null,
+      name: text(raw.name) || `${industry} customers`,
+      industry,
+      searchTerms: stringList(raw.searchTerms),
       anyOf,
       websiteAnyOf,
       instagramAnyOf,
@@ -200,12 +203,11 @@ export function riskyTerms(rule: Pick<SuggestedRule, "anyOf" | "websiteAnyOf" | 
 }
 
 /** The draft as the rule form and the preview both expect it. */
-export function suggestedRuleToDraft(suggested: SuggestedRule, priority: number): CategoryRule {
+export function suggestedRuleToDraft(suggested: SuggestedRule, priority: number): Icp {
   return {
     id: "draft",
     name: suggested.name,
-    category: suggested.category,
-    subcategory: suggested.subcategory,
+    industry: suggested.industry,
     priority,
     enabled: true,
     sources: [],
@@ -216,6 +218,12 @@ export function suggestedRuleToDraft(suggested: SuggestedRule, priority: number)
     requireAll: suggested.requireAll,
     minFollowers: suggested.minFollowers,
     maxFollowers: suggested.maxFollowers,
+    searchTerms: suggested.searchTerms,
+    // Conditions are never suggested: they are claims about facts, and the operator should set
+    // them deliberately rather than find them already ticked.
+    requiresWebsite: false,
+    minReviews: null,
+    places: [],
   };
 }
 
@@ -255,4 +263,4 @@ function reasonMap(value: unknown): Record<string, string> {
 }
 
 /** Kept for callers that want to show which sources a suggestion could have narrowed to. */
-export const SUGGESTABLE_SOURCES = CATEGORY_SOURCES;
+export const SUGGESTABLE_SOURCES = ICP_SOURCES;

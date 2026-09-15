@@ -10,7 +10,7 @@ import Link from "next/link";
 import { instagramCandidateIds } from "@/lib/instagram-candidates";
 import { selectFilteredIds } from "@/lib/lead-filters";
 import { createClient } from "@/lib/supabase/server";
-import { AppShell, Banner, Money, Note, PANEL, Panel } from "../../ui";
+import { AppShell, Banner, Money, Note, PANEL, Panel, StageStrip } from "../../ui";
 import { buyEnrichment } from "./actions";
 
 /**
@@ -51,8 +51,9 @@ interface Params {
    * admit exists. They are no longer read one by one anyway: `selectFilteredIds` takes the lot and
    * applies the same predicate the list used to count the button.
    */
-  f_category?: string;
-  f_subcategory?: string;
+  f_icp?: string;
+  f_reviews?: string;
+  f_where?: string;
   f_rule?: string;
   f_ads?: string;
   f_minFollowers?: string;
@@ -118,8 +119,9 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
         website: params.f_website,
         from: params.f_from,
         batch: params.f_batch,
-        category: params.f_category,
-        subcategory: params.f_subcategory,
+        icp: params.f_icp,
+        reviews: params.f_reviews,
+        where: params.f_where,
         rule: params.f_rule,
         ads: params.f_ads,
         minFollowers: params.f_minFollowers,
@@ -406,6 +408,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       title="Buy extra data"
       what="Nothing here is bought until you confirm. Anything already bought is shown as free, and a spend cap stops a run that goes further than you expected."
     >
+      <StageStrip current="enrichment" />
       {children}
     </AppShell>
   );

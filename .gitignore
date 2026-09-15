@@ -26,3 +26,11 @@ Thumbs.db
 .turbo/
 
 drizzle/meta/
+
+# Recordings and other large media dropped in the project folder while working
+*.mp4
+*.mov
+*.mkv
+
+# The seeded wireframe canvas is 3 MB and rebuilt from design/wireframes/build.py
+design/wireframes/lead-intel-wireframes.html

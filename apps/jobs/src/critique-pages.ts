@@ -8,7 +8,7 @@ import {
   type PageStructure,
   type PageType,
 } from "@lead-intel/core";
-import { businesses, pageAudits, pageChecklists, type Database } from "@lead-intel/db";
+import { businesses, icps, pageAudits, pageChecklists, type Database } from "@lead-intel/db";
 import { callGemini, DEFAULT_GEMINI_MODEL, isFatal, parseJsonAnswer } from "@lead-intel/providers";
 import { eq } from "drizzle-orm";
 import { recordProviderCall } from "./provider-calls.js";
@@ -54,9 +54,12 @@ export async function critiquePages(db: Database, businessId: string): Promise<C
     stopped: null,
   };
 
+  // The industry comes from the ICP the business matched, which is where an industry now lives.
+  // A business in no ICP has none, and is then judged on the universal rules alone.
   const [business] = await db
-    .select({ displayName: businesses.displayName, category: businesses.category })
+    .select({ displayName: businesses.displayName, industry: icps.industry })
     .from(businesses)
+    .leftJoin(icps, eq(icps.id, businesses.icpId))
     .where(eq(businesses.id, businessId))
     .limit(1);
   if (!business) throw new Error(`business ${businessId} not found`);
@@ -81,7 +84,7 @@ export async function critiquePages(db: Database, businessId: string): Promise<C
     id: r.id,
     name: r.name,
     pageType: r.pageType as ChecklistRule["pageType"],
-    category: r.category,
+    industry: r.industry,
     field: r.field as ChecklistRule["field"],
     test: r.test as ChecklistRule["test"],
     value: r.value,
@@ -98,7 +101,7 @@ export async function critiquePages(db: Database, businessId: string): Promise<C
     const structure = (audit.structure ?? null) as PageStructure | null;
     const results = runChecklist(checklist, {
       pageType: audit.pageType as PageType,
-      category: business.category ?? null,
+      industry: business.industry ?? null,
       structure,
       layout: (audit.layout ?? null) as Record<string, unknown> | null,
     });

@@ -38,7 +38,7 @@ export async function explainBusiness(formData: FormData): Promise<void> {
   const [{ data: business }, { data: fields }, { data: findings }] = await Promise.all([
     supabase
       .from("businesses")
-      .select("display_name, city, route, category, subcategory")
+      .select("display_name, city, route, icp_name")
       .eq("id", businessId)
       .maybeSingle(),
     supabase.from("field_metadata").select("field_name, value").eq("business_id", businessId),
@@ -65,8 +65,8 @@ export async function explainBusiness(formData: FormData): Promise<void> {
       points: Number(f.points ?? 0),
     })),
     route: business.route,
-    operatorCategory: business.category
-      ? `${business.category}${business.subcategory ? ` > ${business.subcategory}` : ""}`
+    operatorCategory: business.icp_name
+      ? String(business.icp_name)
       : null,
   };
 

@@ -40,8 +40,15 @@ interface RunSpend {
   providerCallCount?: number;
 }
 
-export default async function RunStatusPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RunStatusPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ partial?: string; of?: string; started?: string }>;
+}) {
   const { id } = await params;
+  const { partial, of, started } = await searchParams;
   const supabase = await createClient();
 
   const { data: run } = await supabase.from("runs").select("*").eq("id", id).maybeSingle();
@@ -56,6 +63,29 @@ export default async function RunStatusPage({ params }: { params: Promise<{ id: 
       <p style={{ marginBottom: 4 }}>
         <Link href="/search">&larr; New search</Link>
       </p>
+
+      {/* Searching an ICP starts one run per word, and some of them can fail to start while others
+          run. Saying so here — on the run they were sent to — is the only place the operator would
+          otherwise have no way of knowing a word was missed. */}
+      {partial && (
+        <div
+          style={{
+            padding: "12px 16px",
+            marginBottom: 16,
+            background: "var(--warn-bg)",
+            border: "1px solid #d3ac71",
+            borderRadius: 3,
+            color: "var(--warn-ink)",
+            fontSize: 15.5,
+          }}
+        >
+          <strong>
+            {started ?? "Some"} of {of ?? "the"} searches started.
+          </strong>{" "}
+          The rest did not: {decodeURIComponent(partial)} Nothing was charged for the ones that never
+          started, and the ones running are unaffected.
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
         <div>
           <h1 style={{ fontSize: 31, margin: "0 0 6px" }}>

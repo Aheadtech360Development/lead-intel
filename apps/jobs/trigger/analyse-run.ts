@@ -4,7 +4,7 @@ import { auditSiteTask } from "./audit-site.js";
 import { jobProgress } from "../src/job-progress.js";
 import { and, eq, notExists, sql } from "drizzle-orm";
 import { auditWebsiteTask } from "./audit-website.js";
-import { categoriseRunTask } from "./categorise.js";
+import { matchIcpsRunTask } from "./match-icps.js";
 import { pageSpeedTask } from "./pagespeed.js";
 import { scoreRunTask } from "./score-run.js";
 import { youTubeRunTask } from "./youtube.js";
@@ -41,24 +41,24 @@ export const analyseRunTask = task({
     limit?: number;
     /**
      * Businesses to sort into categories once the analysis has finished. Empty means "do not
-     * categorise"; the Categories screen runs its own whole-list pass separately.
+     * categorise"; the ICPs screen runs its own whole-list pass separately.
      *
      * Done here rather than triggered alongside because a category rule reads the text the crawl
      * produces. Fired in parallel it would sort a freshly imported file on evidence that does not
      * exist yet and file most of it under nothing.
      */
-    categoriseIds?: string[];
+    matchIcpIds?: string[];
     /**
      * Sort the **whole list** afterwards rather than a named set.
      *
      * What discovery and the "Analyse them now" button want. Neither of them knows which businesses
      * it is about to create or fix — discovery passes an empty id list meaning "everything without
-     * findings" — so neither can name ids to categorise. Re-sorting everything is free, reads only
+     * findings" — so neither can name ids to match. Re-sorting everything is free, reads only
      * stored text, and is deterministic, so doing it whole costs nothing but a little time and
-     * removes the case where a business is analysed and then left uncategorised because the step
+     * removes the case where a business is analysed and then left without an ICP because the step
      * that would have labelled it had nothing to go on.
      */
-    categoriseAll?: boolean;
+    matchAllIcps?: boolean;
     /**
      * The row the web app created when the operator pressed the button, so this run can report
      * itself. Optional: a run started from a script or a retry still works, it just reports to
@@ -95,23 +95,23 @@ export const analyseRunTask = task({
     const db = createDbClient();
 
     const explicit = (payload.businessIds ?? []).filter((id) => id.length > 0);
-    const toCategorise = (payload.categoriseIds ?? []).filter((id) => id.length > 0);
+    const toMatch = (payload.matchIcpIds ?? []).filter((id) => id.length > 0);
 
     // Categorise-only: the operator asked for sorting without a crawl, so there is nothing here to
     // wait for. Returning early keeps that from spending an hour of task budget doing no work.
     if (payload.skipAnalysis) {
-      let categorised = 0;
-      if (payload.categoriseAll) {
-        const run = await categoriseRunTask.triggerAndWait({});
-        if (run.ok) categorised = run.output.categorised;
-      } else if (toCategorise.length > 0) {
-        const run = await categoriseRunTask.triggerAndWait({ businessIds: toCategorise });
-        if (run.ok) categorised = run.output.categorised;
+      let matched = 0;
+      if (payload.matchAllIcps) {
+        const run = await matchIcpsRunTask.triggerAndWait({});
+        if (run.ok) matched = run.output.matched;
+      } else if (toMatch.length > 0) {
+        const run = await matchIcpsRunTask.triggerAndWait({ businessIds: toMatch });
+        if (run.ok) matched = run.output.matched;
       }
       // The count that came back, not the count sent. "Sorted 40 of the 121 I looked at" is a
       // different and more useful fact than "asked about 121" — most rules match some and not all.
-      logger.info("categorise only", { categorised, asked: toCategorise.length });
-      return { audited: 0, measured: 0, categorised, youtube: null };
+      logger.info("icp matching only", { matched, asked: toMatch.length });
+      return { audited: 0, measured: 0, matched, youtube: null };
     }
 
     // "Never analysed" is the absence of a findings row, the same definition `audit-run` uses.
@@ -187,13 +187,13 @@ export const analyseRunTask = task({
 
       // Last, because it is the only step that reads what the crawl wrote. A rule looking for
       // "embroidery" on a website needs the website to have been read first.
-      let categorised = 0;
-      if (payload.categoriseAll) {
-        const run = await categoriseRunTask.triggerAndWait({});
-        if (run.ok) categorised = run.output.categorised;
-      } else if (toCategorise.length > 0) {
-        const run = await categoriseRunTask.triggerAndWait({ businessIds: toCategorise });
-        if (run.ok) categorised = run.output.categorised;
+      let matched = 0;
+      if (payload.matchAllIcps) {
+        const run = await matchIcpsRunTask.triggerAndWait({});
+        if (run.ok) matched = run.output.matched;
+      } else if (toMatch.length > 0) {
+        const run = await matchIcpsRunTask.triggerAndWait({ businessIds: toMatch });
+        if (run.ok) matched = run.output.matched;
       }
 
       if (payload.thenAuditSites && explicit.length > 0) {
@@ -201,7 +201,7 @@ export const analyseRunTask = task({
       await auditSiteTask.batchTriggerAndWait(explicit.map((id) => ({ payload: { businessId: id } })));
     }
 
-    logger.info("analysis finished", { audited, measured, categorised, youtube });
+    logger.info("analysis finished", { audited, measured, matched, youtube });
 
       // Always a sentence, never a blank. A finished row with no detail reads, on the operator's
       // screen, exactly like one that is still going.
@@ -211,10 +211,10 @@ export const analyseRunTask = task({
           `Read ${audited} ${audited === 1 ? "website" : "websites"}, measured ${measured} for speed, ` +
           `checked ${youtube.checked} YouTube ${youtube.checked === 1 ? "channel" : "channels"}` +
           `${youtube.stoppedOnQuota ? " (YouTube's daily quota ran out, the rest wait for tomorrow)" : ""}, ` +
-          `and sorted ${categorised} into categories. Nothing here cost anything.`,
+          `and sorted ${matched} into categories. Nothing here cost anything.`,
       });
 
-      return { audited, measured, categorised, youtube };
+      return { audited, measured, matched, youtube };
     } catch (err) {
       /**
        * The row must stop saying "running" whatever happens.

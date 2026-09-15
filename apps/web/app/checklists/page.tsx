@@ -12,13 +12,13 @@ import {
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../actions";
-import { AppShell, Badge, Banner, InfoBox, Note, PANEL, Panel, SectionHeading, TD, Th } from "../ui";
+import { AppShell, Badge, Banner, InfoBox, Note, PANEL, Panel, SectionHeading, TD, Th, StageStrip } from "../ui";
 import { addExampleChecklists, deleteChecklistRule, saveChecklistRule } from "./actions";
 
 /**
  * Where the operator writes down what a good page looks like.
  *
- * Built to the same shape as the category rules, because the risk is the same one: a rule that
+ * Built to the same shape as an ICP, because the risk is the same one: a rule that
  * sounds sensible and fires on almost everything is not a finding, it is a badly written rule. So
  * this screen shows, for every rule, **how many audited pages currently fail it** — and for a draft,
  * before it is saved.
@@ -26,12 +26,14 @@ import { addExampleChecklists, deleteChecklistRule, saveChecklistRule } from "./
 
 interface Params {
   edit?: string;
+  /** "1" while the panel is open on a new rule. Editing carries `edit` instead. */
+  add?: string;
   error?: string;
   saved?: string;
   preview?: string;
   name?: string;
   pageType?: string;
-  category?: string;
+  industry?: string;
   field?: string;
   test?: string;
   value?: string;
@@ -47,15 +49,20 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
 
   const [{ data: rules }, { data: audits }, { data: categories }] = await Promise.all([
     supabase.from("page_checklists").select("*").order("page_type").order("name"),
-    // Every audited page, with the business's category — the whole corpus a rule is measured on.
+    // Every audited page, with the industry of the business's ICP — the corpus a rule is measured on.
     supabase.from("page_audits").select("url, page_type, structure, layout, business_id").limit(5000),
-    supabase.from("businesses").select("id, category").eq("status", "active").limit(5000),
+    supabase.from("businesses").select("id, icps(industry)").eq("status", "active").limit(5000),
   ]);
 
-  const categoryOf = new Map((categories ?? []).map((b) => [b.id as string, (b.category ?? null) as string | null]));
+  const industryOf = new Map(
+    (categories ?? []).map((b) => [
+      b.id as string,
+      ((b as { icps?: { industry?: string } | null }).icps?.industry ?? null) as string | null,
+    ]),
+  );
   const pages = (audits ?? []).map((a) => ({
     pageType: a.page_type as PageType,
-    category: categoryOf.get(a.business_id as string) ?? null,
+    industry: industryOf.get(a.business_id as string) ?? null,
     structure: (a.structure ?? null) as PageStructure | null,
     layout: (a.layout ?? null) as Record<string, unknown> | null,
   }));
@@ -87,7 +94,7 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
         id: params.edit ?? "draft",
         name: params.name || "This rule",
         pageType: (params.pageType || null) as PageType | null,
-        category: params.category || null,
+        industry: params.industry || null,
         field: params.field ?? "",
         test: (params.test ?? "present") as ChecklistRule["test"],
         value: params.value ? Number(params.value) : null,
@@ -100,6 +107,15 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
   const draftMeasure = draft && CHECKABLE_FIELDS.some((f) => f.id === draft.field) ? measure(draft) : null;
   const form = draft ?? editing;
 
+  /**
+   * The form is a panel, closed until asked for — the same rule the ICPs screen follows.
+   *
+   * A form sitting open on a page is a question nobody asked. This one opens on + Add a rule, on
+   * Edit, and on the way back from Preview, because all three are states this page can be in
+   * without any JavaScript: each is a URL.
+   */
+  const panelOpen = params.add === "1" || Boolean(params.edit) || Boolean(params.preview);
+
   return (
     <AppShell
       autoRefresh={false}
@@ -108,8 +124,8 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
       signOutAction={signOut}
       title="Checklists"
       actions={
-        <Link href="#write" className="btn" style={{ textDecoration: "none" }}>
-          + Write a rule
+        <Link href="/checklists?add=1" className="btn" style={{ textDecoration: "none" }}>
+          + Add a rule
         </Link>
       }
       what={
@@ -120,6 +136,7 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
       }
     >
       <>
+        <StageStrip current="analysis" />
         {params.error && <Banner tone="bad">{decodeURIComponent(params.error)}</Banner>}
         {params.saved && (
           <Banner tone="good">
@@ -182,7 +199,7 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
                         <td style={{ ...TD, fontSize: 15 }}>
                           {rule.pageType ? PAGE_TYPE_LABELS[rule.pageType] : "Any page"}
                           <div style={{ color: "var(--ink-3)", fontSize: 14.5 }}>
-                            {rule.category ?? "any category"}
+                            {rule.industry ?? "any industry"}
                           </div>
                         </td>
                         <td style={{ ...TD, fontSize: 15 }}>
@@ -233,7 +250,44 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
           </Panel>
         )}
 
-        <div id="write" style={{ scrollMarginTop: 20 }} />
+        {panelOpen && (
+          <div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
+            <Link
+              href="/checklists"
+              aria-label="Close without saving"
+              style={{ position: "absolute", inset: 0, background: "rgba(16, 20, 28, 0.45)" }}
+            />
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                right: 0,
+                bottom: 0,
+                width: "min(760px, 100%)",
+                background: "var(--paper)",
+                borderLeft: "2px solid var(--rule)",
+                overflowY: "auto",
+                padding: "20px 22px 60px",
+                display: "grid",
+                gap: 16,
+                alignContent: "start",
+                boxShadow: "0 0 60px -10px rgba(16, 20, 28, 0.45)",
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+                <div>
+                  <div style={{ fontSize: 22, fontWeight: 700 }}>
+                    {editing ? `Edit “${editing.name}”` : "Add a rule"}
+                  </div>
+                  <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 3 }}>
+                    Nothing is saved until you press the button at the bottom.
+                  </div>
+                </div>
+                <Link href="/checklists" className="btn-2 btn" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
+                  ✕ Close
+                </Link>
+              </div>
+
         <SectionHeading
           title={editing ? `Edit “${editing.name}”` : "Write a rule"}
           hint="Pick something the system measures, say what it should be, and write the sentence you would say on a call."
@@ -268,6 +322,9 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
           <form action={saveChecklistRule} style={{ padding: "16px 18px", display: "grid", gap: 16 }}>
             {editing && <input type="hidden" name="id" value={editing.id} />}
             {editing && <input type="hidden" name="edit" value={editing.id} />}
+            {/* Preview is a GET submit of this form; without this the panel would close on the way
+                back and take a half-written rule with it. */}
+            {!editing && <input type="hidden" name="add" value="1" />}
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
               <Field label="Name it" hint="For you, in the rules table">
@@ -283,8 +340,8 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
                   ))}
                 </select>
               </Field>
-              <Field label="Which category" hint="Blank means every category — where universal rules live">
-                <input name="category" defaultValue={form?.category ?? ""} placeholder="e.g. Printing" style={INPUT} />
+              <Field label="Which industry" hint="Blank means every industry — where universal rules live">
+                <input name="industry" defaultValue={form?.industry ?? ""} placeholder="e.g. Printing" style={INPUT} />
               </Field>
               <Field label="Weight" hint="How much it matters, 1–50">
                 <input name="weight" type="number" defaultValue={form?.weight ?? 10} style={INPUT} />
@@ -339,7 +396,7 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
                 Preview — what would this flag?
               </button>
               <button className="btn" type="submit">
-                {editing ? "Save changes" : "Add the rule"}
+                {editing ? "Save changes" : "Save this rule"}
               </button>
               {(editing || draft) && (
                 <Link href="/checklists" style={{ fontSize: 15.5 }}>
@@ -354,6 +411,9 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
             the scorecard says so, and the score is worked out only from what was actually judged.
           </Note>
         </Panel>
+            </div>
+          </div>
+        )}
 
         <details style={{ marginTop: 20 }}>
           <summary style={{ cursor: "pointer", fontSize: 16, fontWeight: 600, padding: "6px 0" }}>
@@ -390,7 +450,7 @@ function toRule(row: Record<string, unknown>): ChecklistRule {
     id: row.id as string,
     name: row.name as string,
     pageType: (row.page_type ?? null) as PageType | null,
-    category: (row.category ?? null) as string | null,
+    industry: (row.industry ?? null) as string | null,
     field: row.field as string,
     test: row.test as ChecklistRule["test"],
     value: (row.value ?? null) as number | null,

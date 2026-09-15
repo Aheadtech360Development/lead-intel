@@ -200,7 +200,7 @@ async function runPipeline(
         // plan says to; a search had no equivalent, so businesses found by search arrived analysed
         // and uncategorised while imported ones arrived analysed and labelled. Two ways in, two
         // different results, for no reason the operator could see.
-        await analyseRunTask.trigger({ businessIds: [], categoriseAll: true });
+        await analyseRunTask.trigger({ businessIds: [], matchAllIcps: true });
       } catch (err) {
         logger.warn("could not start the analysis; the leads list will offer it", {
           error: err instanceof Error ? err.message : String(err),

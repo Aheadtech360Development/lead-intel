@@ -30,7 +30,7 @@ export async function auditWebsite(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data: claimsData } = await supabase.auth.getClaims();
   if (typeof claimsData?.claims?.sub !== "string") {
-    redirect(`/records/${businessId}?error=${encodeURIComponent("You are not signed in.")}`);
+    redirect(`/records/${businessId}?tab=website&error=${encodeURIComponent("You are not signed in.")}`);
   }
 
   // Named after the business, because this job's progress is shown on that business's own record
@@ -54,7 +54,7 @@ export async function auditWebsite(formData: FormData): Promise<void> {
   const blocked = enqueueBlockedBecause();
   if (blocked.blocked) {
     await failJobRun(supabase, jobRunId, blocked.why);
-    redirect(`/records/${businessId}?error=${encodeURIComponent(blocked.why)}`);
+    redirect(`/records/${businessId}?tab=website&error=${encodeURIComponent(blocked.why)}`);
   }
 
   try {
@@ -65,14 +65,14 @@ export async function auditWebsite(formData: FormData): Promise<void> {
     // Surfaced, not swallowed. An operator who pressed the button and saw a cheerful message while
     // nothing ran would wait for scorecards that were never coming.
     redirect(
-      `/records/${businessId}?error=${encodeURIComponent(
+      `/records/${businessId}?tab=website&error=${encodeURIComponent(
         explainEnqueueFailure(err),
       )}`,
     );
   }
 
   redirect(
-    `/records/${businessId}?saved=${encodeURIComponent(
+    `/records/${businessId}?tab=website&saved=${encodeURIComponent(
       "Reading their website now, page by page — usually under a minute. Refresh to see the scorecards. " +
         "It costs machine time on Trigger.dev and nothing to any provider.",
     )}`,
@@ -124,8 +124,8 @@ export async function fullAnalyse(formData: FormData): Promise<void> {
   try {
     const handle = await tasks.trigger<typeof analyseRunTask>("analyse-run", {
       businessIds: [businessId],
-      categoriseAll: false,
-      categoriseIds: [businessId],
+      matchAllIcps: false,
+      matchIcpIds: [businessId],
       // The browser pass last. See the note on thenAuditSites in the task.
       thenAuditSites: true,
       jobRunId,

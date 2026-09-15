@@ -116,10 +116,24 @@ export default async function RecordDetailPage({
    * `error`. So every message any of them has ever produced was discarded on arrival, and pressing
    * a button here has always looked identical to pressing nothing.
    */
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; tab?: string; log?: string }>;
 }) {
   const { id } = await params;
   const message = await searchParams;
+
+  /**
+   * One business, in four tabs.
+   *
+   * Everything here used to be one very long page: who they are, everything known about them,
+   * every page of their website, every one of the 51 checks, the call log and every job ever run.
+   * All of it matters and none of it is wanted at the same time — the operator's report was that
+   * the important things were buried.
+   *
+   * The tab is a URL, not state. That keeps the page free of JavaScript, makes a tab linkable, and
+   * means the browser's back button moves between them the way it moves anywhere else.
+   */
+  const tab: "overview" | "website" | "checks" | "calls" =
+    message.tab === "website" || message.tab === "checks" || message.tab === "calls" ? message.tab : "overview";
   const supabase = await createClient();
 
   const { data: claimsData } = await supabase.auth.getClaims();
@@ -127,6 +141,13 @@ export default async function RecordDetailPage({
 
   const { data: business } = await supabase.from("businesses").select("*").eq("id", id).maybeSingle();
   if (!business) notFound();
+
+  // Checklist rules are scoped by industry, and an industry now lives on the ICP the business
+  // matched. A business in no ICP has none, and is judged on the universal rules alone.
+  const { data: icpRow } = business.icp_id
+    ? await supabase.from("icps").select("industry").eq("id", business.icp_id).maybeSingle()
+    : { data: null };
+  const icpIndustry = (icpRow?.industry as string | null) ?? null;
 
   const { data: batch } = business.import_batch_id
     ? await supabase.from("import_batches").select("filename").eq("id", business.import_batch_id).maybeSingle()
@@ -233,7 +254,7 @@ export default async function RecordDetailPage({
 
   // The page-by-page audit, judged against the current checklists. See lib/page-scorecards.ts
   // for why the verdicts are worked out here rather than stored.
-  const scorecards = await loadScorecards(supabase, id, business.category ?? null);
+  const scorecards = await loadScorecards(supabase, id, icpIndustry);
 
   const problems = (findings ?? []).filter((f) => f.outcome === "fired" && f.family !== "N");
   const credits = (findings ?? []).filter((f) => f.outcome === "fired" && f.family === "N");
@@ -267,7 +288,10 @@ export default async function RecordDetailPage({
         <div style={{ ...PANEL, padding: "20px 22px", marginBottom: 18 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 380px" }}>
-              <h1 style={{ fontSize: 30, margin: "0 0 3px", lineHeight: 1.2 }}>{business.display_name}</h1>
+              <h1 style={{ fontSize: 30, margin: "0 0 3px", lineHeight: 1.2, display: "flex", alignItems: "center", gap: 12 }}>
+                {business.tier ? <TierBadge tier={business.tier} /> : null}
+                {business.display_name}
+              </h1>
               <p style={{ margin: "0 0 16px", color: "var(--ink-3)", fontSize: 16 }}>
                 {[business.city, business.state].filter(Boolean).join(", ") || "Location not recorded"}
               </p>
@@ -461,216 +485,142 @@ export default async function RecordDetailPage({
           )}
         </div>
 
-        {businessJobs.length > 0 &&
-          (() => {
-            const live = businessJobs.filter((j) => j.status === "running" || j.status === "queued");
-            return (
-              <div className="card" style={{ marginBottom: 18 }} {...(live.length > 0 ? { "data-tone": "brand" } : {})}>
-                {/*
-                  * Closed unless something is actually running.
-                  *
-                  * Every re-run leaves a row here, so after a few attempts this was five paragraphs
-                  * of finished job summaries sitting between the operator and the record they came
-                  * to read. A `<details>` needs no JavaScript and remembers nothing, which is right:
-                  * the useful default is "hidden", and the exception — a job in flight — opens it by
-                  * itself.
-                  */}
-                <details open={live.length > 0}>
-                  <summary
-                    style={{
-                      padding: "14px 18px",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "baseline",
-                      gap: 12,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <span style={{ fontSize: 18, fontWeight: 750, color: "var(--ink)" }}>
-                      What has been run on this business
-                    </span>
-                    <span style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
-                      {live.length > 0
-                        ? `${live.length} running now`
-                        : `${businessJobs.length} finished — click to see`}
-                    </span>
-                  </summary>
-                  <div style={{ padding: "0 18px 16px", borderTop: "1px solid var(--rule)" }}>
-                    {businessJobs.map((job) => (
-                      <JobLine key={job.id} job={job} compact />
-                    ))}
-                  </div>
-                </details>
-              </div>
-            );
-          })()}
 
         {/*
-          * Everything known about them, in one place, grouped by who told us.
-          *
-          * The operator's report was that opening a business did not show what the system knows.
-          * It was accurate: Google's rating and review count, the YouTube channel, the speed
-          * measurement, the page title and the crawl result were all stored and none of them
-          * appeared anywhere. Grouping by source rather than by subject is deliberate - these facts
-          * have very different reliability, and a screen that mixes them teaches the operator to
-          * trust them equally.
-          */}
-        <Panel
-          title="Everything we know about them"
-          hint="Grouped by where each fact came from, because they are not all equally reliable. Anything blank says so rather than being left empty."
-          tone="info"
+          The four tabs. Links, not buttons: each one is a URL, so a tab can be sent to someone and
+          the back button moves between them.
+        */}
+        <nav
+          style={{
+            display: "flex",
+            gap: 4,
+            flexWrap: "wrap",
+            borderBottom: "1.5px solid var(--rule)",
+            margin: "0 0 18px",
+          }}
         >
-          <div style={GROUP_HEAD("var(--info-ink)")}>From their Google listing</div>
-          <FactGrid>
-            <Fact label="Rating" value={rating ? <Stars rating={Number(rating)} /> : null} missing="Not bought" from="Google Places" />
-            <Fact
-              label="Reviews"
-              value={reviewCount ? Number(reviewCount).toLocaleString("en-GB") : null}
-              missing="Not bought"
-              from="Google Places"
-            />
-            <Fact label="Phone" value={phone ? <a href={`tel:${phone}`}>{phone}</a> : null} missing="None listed" from="Google Places" />
-            <Fact label="Google files them under" value={googleCategory} missing="Not recorded" from="Google Places" />
-            <Fact
-              label="Still trading?"
-              value={businessStatus === "operational" ? "Yes, operational" : businessStatus}
-              missing="Not checked"
-              from="Google Places"
-              tone={businessStatus === "operational" ? "good" : businessStatus ? "warn" : undefined}
-            />
-            <Fact
-              label="Listing bought?"
-              value={listingOutcome === "ok" ? "Yes, rating and reviews are real" : listingOutcome}
-              missing="Not bought yet"
-              from={listingOutcome ? "3.5c already spent with Google" : "would cost 3.5c with Google"}
-            />
-          </FactGrid>
+          {[
+            { id: "overview", label: "Overview" },
+            { id: "website", label: `Website pages${scorecards.length > 0 ? ` (${scorecards.length})` : ""}` },
+            { id: "checks", label: "Checks & scores" },
+            { id: "calls", label: `Calls & history${(outcomes ?? []).length > 0 ? ` (${(outcomes ?? []).length})` : ""}` },
+          ].map((t) => (
+            <Link
+              key={t.id}
+              href={t.id === "overview" ? `/records/${id}` : `/records/${id}?tab=${t.id}`}
+              style={{
+                padding: "10px 14px",
+                fontSize: 16,
+                textDecoration: "none",
+                color: tab === t.id ? "var(--ink)" : "var(--ink-2)",
+                fontWeight: tab === t.id ? 700 : 500,
+                borderBottom: tab === t.id ? "3px solid var(--ink)" : "3px solid transparent",
+                marginBottom: -1.5,
+              }}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </nav>
 
-          <div style={{ ...GROUP_HEAD("var(--good-ink)"), borderTop: "1px solid var(--rule)", marginTop: 4 }}>
-            From their own website &mdash; free, our own crawler
-          </div>
-          <FactGrid>
-            <Fact
-              label="Website"
-              value={domain ? <a href={`https://${domain}`} target="_blank" rel="noreferrer noopener">{domain} &#8599;</a> : null}
-              missing="None found"
-              from={WEBSITE_LABELS[business.website_status] ?? business.website_status}
-            />
-            <Fact label="What the site calls itself" value={site.title} missing="No title tag" from="their home page" />
-            <Fact
-              label="Pages the crawler read"
-              value={site.pagesRead}
-              missing="None read"
-              from={site.crawlOutcome ?? "not crawled"}
-            />
-            {/*
-              * Shown only when a browser did better, which is the case worth explaining. A record
-              * that says "403, 0 pages" directly above five pages of that same site with screenshots
-              * is a record contradicting itself, and the operator read it exactly that way.
-              */}
-            {site.browserPages ? (
-              <Fact
-                label="Pages a browser read"
-                value={site.browserPages}
-                from="the page-by-page audit got in where the crawler was refused"
-                tone="good"
-              />
-            ) : null}
-            <Fact
-              label="Speed on a phone"
-              value={perfScore ? `${perfScore} / 100` : null}
-              missing="No score"
-              from={lcp ? `main content appears in ${(Number(lcp) / 1000).toFixed(1)}s` : "Google PageSpeed, free"}
-              tone={perfScore ? (Number(perfScore) >= 50 ? "good" : "bad") : undefined}
-            />
-            <Fact
-              label="Email on their site"
-              value={contactEmail ? <a href={`mailto:${contactEmail}`}>{contactEmail}</a> : null}
-              missing="None found"
-              from="their own pages"
-            />
-            <Fact label="Phone on their site" value={site.webPhone} missing="None found" from="their own pages" />
-            <Fact
-              label="Who to ask for"
-              value={contactName}
-              missing="Not stated anywhere"
-              from={contactNameSource ? `stated on ${contactNameSource}` : "their about page"}
-            />
-            <Fact label="Server answered" value={site.httpStatus} missing="Never answered" from={site.crawlDetail ?? "our crawler"} />
-          </FactGrid>
 
-          <div style={{ ...GROUP_HEAD("var(--social-ink)"), borderTop: "1px solid var(--rule)", marginTop: 4 }}>
-            Away from their own site
-          </div>
-          <FactGrid>
-            <Fact
-              label="Instagram"
-              value={
-                instagram.handle ? (
-                  <a href={instagram.url ?? `https://instagram.com/${instagram.handle}`} target="_blank" rel="noreferrer noopener">
-                    @{instagram.handle} &#8599;
-                  </a>
-                ) : null
-              }
-              missing="No account known"
-              from={instagram.url ? "found on their website, or typed in" : "paste one below if you know it"}
-            />
-            <Fact
-              label="Followers"
-              value={instagram.followers ? Number(instagram.followers).toLocaleString("en-GB") : null}
-              missing="Not bought"
-              from={instagram.followers ? "Apify, 0.26c already spent" : "would cost 0.26c with Apify"}
-              size="large"
-              tone={instagram.followers && Number(instagram.followers) >= 10000 ? "good" : undefined}
-            />
-            <Fact label="Posts" value={instagram.posts} missing="Not bought" from="Apify" />
-            <Fact label="Instagram files them under" value={instagram.category} missing="Not bought" from="Apify" />
-            <Fact
-              label="Facebook"
-              value={metaAds.page ? <a href={metaAds.page} target="_blank" rel="noreferrer noopener">Their page &#8599;</a> : null}
-              missing="None found"
-              from="linked from their website"
-            />
-            <Fact
-              label="Running ads?"
-              value={
-                metaAds.running === "true"
-                  ? `Yes, ${metaAds.activeCount ?? "some"} live`
-                  : metaAds.running === "false"
-                    ? "No ads running"
-                    : null
-              }
-              missing="Never checked"
-              from={metaAds.checkedAt ? "Meta Ad Library, already bought" : "would cost 11.6c with Apify"}
-              tone={metaAds.running === "true" ? "good" : undefined}
-            />
-            <Fact
-              label="YouTube"
-              value={youtube.channel}
-              missing={youtube.outcome === "failed" ? "No channel found" : "Not checked"}
-              from={
-                youtube.latestVideoAt
-                  ? `last video ${new Date(youtube.latestVideoAt).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
-                  : "YouTube Data API, free"
-              }
-            />
-          </FactGrid>
-
-          {instagram.bio && (
-            <div style={{ padding: "0 18px 16px" }}>
-              <div style={{ fontSize: 13.5, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--ink-2)", fontWeight: 800 }}>
-                What their Instagram bio says
-              </div>
-              <div style={{ fontSize: 15.5, color: "var(--ink)", marginTop: 4, lineHeight: 1.6, whiteSpace: "pre-wrap", maxWidth: 720 }}>
-                {instagram.bio}
-              </div>
-            </div>
-          )}
-        </Panel>
-
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)", gap: 20, alignItems: "start" }}>
+        {/*
+          Two columns on the tabs that have something for both, one on the tabs that do not. The
+          right-hand column is not rendered at all when it would be empty — an empty grid cell is a
+          gap the eye still has to cross.
+        */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              tab === "overview"
+                ? "minmax(0, 1fr) minmax(0, 1.4fr)"
+                : tab === "checks"
+                  ? "minmax(0, 1.15fr) minmax(0, 1fr)"
+                  : "minmax(0, 1fr)",
+            gap: 20,
+            alignItems: "start",
+          }}
+        >
           {/* ================= LEFT: what to do ================= */}
           <div>
+            {tab === "overview" && (
+            <Panel title="Why this lead, in plain terms">
+              <div style={{ padding: "16px 18px" }}>
+                {problem === null ? (
+                  <p style={{ margin: 0, fontSize: 16, color: "var(--ink-2)" }}>
+                    <strong>We could not score this business.</strong>{" "}
+                    {business.route_reason ?? "Too little could be measured."} That is not a judgement
+                    about them — it means we could not read enough to have an opinion.
+                  </p>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ ...label, marginBottom: 4 }}>Sell them</div>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>
+                        {business.route ? ROUTE_LABELS[business.route] ?? business.route : "Nothing solid enough yet"}
+                      </div>
+                      {business.route_reason && (
+                        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 3 }}>{business.route_reason}</div>
+                      )}
+                    </div>
+
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 4 }}>
+                        <strong>Problem score — how much is wrong</strong>
+                        <span style={{ fontWeight: 700 }}>{problem} / 100</span>
+                      </div>
+                      <Meter value={problem} tone="problem" height={10} />
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 4 }}>
+                        {problem >= 55
+                          ? "Above 55, so there is enough wrong here to be worth a call."
+                          : "Below 55 — not much is wrong, so this is a harder conversation to open."}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 4 }}>
+                        <strong>Buying signals — do they spend money?</strong>
+                        <span style={{ fontWeight: 700 }}>{intent ?? 0} / 100</span>
+                      </div>
+                      <Meter value={intent} tone="good" height={10} />
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 4 }}>
+                        {(intent ?? 0) >= 35
+                          ? "Above 35 — they already pay for tools or advertising, so there is a budget."
+                          : "Below 35 — we found little sign they currently pay for anything."}
+                      </div>
+                    </div>
+
+                    {/* The question the operator actually asked: why is this Priority 1? */}
+                    <div style={{ padding: "13px 14px", background: "var(--surface-2)", borderRadius: 5 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        <TierBadge tier={business.tier} />
+                        <strong style={{ fontSize: 16 }}>
+                          {business.tier ? `Priority ${business.tier}` : "No priority"}
+                        </strong>
+                      </div>
+                      <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55 }}>
+                        {business.tier ? (
+                          <>
+                            {TIER_MEANING[business.tier]}.
+                            <div style={{ marginTop: 7, color: "var(--ink-3)", fontSize: 14.5 }}>
+                              Worked out from exactly two comparisons: problem score{" "}
+                              <strong>{problem}</strong> is {problem >= 55 ? "above" : "below"} 55, and
+                              buying signals <strong>{intent ?? 0}</strong> {(intent ?? 0) >= 35 ? "above" : "below"}{" "}
+                              35. Nothing else changes the priority.
+                            </div>
+                          </>
+                        ) : (
+                          "Not enough was measured to place this business."
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </Panel>
+            )}
+            {tab === "overview" && (
             <Panel
               title="What to say when they answer"
               hint="Built from one specific thing we found. If we had nothing solid, no line is suggested at all."
@@ -691,129 +641,11 @@ export default async function RecordDetailPage({
                 ))
               )}
             </Panel>
+            )}
 
             {/* Off-site presence, in its own panel. It is bought separately from the free crawl,
                 arrives separately, and answers a different question — so mixing it into the
                 website findings would blur where each fact came from. */}
-            <Panel
-              title="Instagram and ads"
-              hint="What they do away from their own website, and whether they already pay to be seen."
-            >
-              <div style={{ padding: "14px 18px", display: "grid", gap: 16 }}>
-                <div>
-                  <div style={label}>Instagram</div>
-                  {instagram.handle ? (
-                    <>
-                      <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>
-                        <a href={`https://instagram.com/${instagram.handle}`} target="_blank" rel="noreferrer noopener">
-                          @{instagram.handle} &#8599;
-                        </a>
-                        {instagram.verified === "true" ? (
-                          <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}> &middot; verified</span>
-                        ) : null}
-                      </div>
-                      <div style={{ display: "flex", gap: 24, marginTop: 9, flexWrap: "wrap" }}>
-                        <Figure
-                          value={instagram.followers ? Number(instagram.followers).toLocaleString() : "not shown"}
-                          label="followers"
-                        />
-                        <Figure value={instagram.posts ? Number(instagram.posts).toLocaleString() : "—"} label="posts" />
-                        <Figure value={instagram.category ?? "—"} label="Instagram's own category" />
-                      </div>
-                      {instagram.bio ? (
-                        <p style={{ fontSize: 15, color: "var(--ink-2)", margin: "11px 0 0", lineHeight: 1.5 }}>
-                          &ldquo;{instagram.bio}&rdquo;
-                        </p>
-                      ) : null}
-                      {instagram.isPrivate === "true" ? (
-                        <p style={{ fontSize: 14.5, color: "var(--ink-3)", margin: "7px 0 0", lineHeight: 1.45 }}>
-                          This account is private, so Instagram withholds the follower count. That is
-                          why it reads &ldquo;not shown&rdquo; rather than zero.
-                        </p>
-                      ) : null}
-                    </>
-                  ) : !instagram.url ? (
-                    /* No link, and no way for the crawler to find one — this business has no site
-                       to crawl. Typing it is the only route, and it is the route to Priority 1:
-                       10,000 followers qualifies on its own. */
-                    <form action={saveInstagramUrl} style={{ marginTop: 6 }}>
-                      <input type="hidden" name="id" value={id} />
-                      <div style={{ fontSize: 15, color: "var(--ink-2)", marginBottom: 7, lineHeight: 1.55 }}>
-                        {business.website_status === "unclear" ? (
-                          <>
-                            No website to find one on, so nobody can look this up for you. Paste it
-                            and a large following can carry them to Priority 1 on its own.
-                          </>
-                        ) : (
-                          <>No Instagram link was found on their website. Paste one if you know it.</>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <input
-                          name="instagram"
-                          placeholder="instagram.com/theirname"
-                          style={{ ...input, flex: "1 1 210px", minWidth: 0 }}
-                        />
-                        <button className="btn-2 btn" type="submit" style={{ fontSize: 15 }}>
-                          Save
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
-                      Their website links to{" "}
-                      <a href={instagram.url} target="_blank" rel="noreferrer noopener">
-                        an Instagram account
-                      </a>
-                      , and nobody has looked it up yet. Tick this business on the leads list to buy
-                      it &mdash; it costs a fraction of a cent.
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
-                  <div style={label}>Facebook &amp; Instagram ads</div>
-                  {metaAds.checkedAt ? (
-                    <>
-                      <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>
-                        {metaAds.running === "true"
-                          ? `Running ${metaAds.activeCount ?? ""} ad${metaAds.activeCount === "1" ? "" : "s"} right now`
-                          : "Not running any ads"}
-                      </div>
-                      {metaAds.since ? (
-                        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2 }}>
-                          advertising since {metaAds.since}
-                          {metaAds.platforms ? ` on ${metaAds.platforms}` : ""}
-                        </div>
-                      ) : null}
-                      {metaAds.sample ? (
-                        <p style={{ fontSize: 14.5, color: "var(--ink-2)", margin: "10px 0 0", lineHeight: 1.5 }}>
-                          &ldquo;{metaAds.sample.split(" \u23D0 ")[0]}&rdquo;
-                        </p>
-                      ) : null}
-                      <p style={{ fontSize: 14.5, color: "var(--ink-3)", margin: "11px 0 0", lineHeight: 1.45 }}>
-                        <strong>What they spend is not shown, and cannot be.</strong> Meta publishes
-                        ad spend only for political and social-issue ads; for an ordinary business it
-                        is empty in Meta&rsquo;s own Ad Library, so no tool or provider can supply
-                        it at any price.
-                      </p>
-                    </>
-                  ) : metaAds.page ? (
-                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
-                      They have{" "}
-                      <a href={metaAds.page} target="_blank" rel="noreferrer noopener">
-                        a Facebook page
-                      </a>
-                      , and nobody has checked whether it is running ads.
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4 }}>
-                      No Facebook page was found on their website.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Panel>
 
             {/* The briefing sits directly above the findings it was written from, and the findings
                 are unchanged. That arrangement is the whole safety design: if the paragraph is
@@ -824,7 +656,15 @@ export default async function RecordDetailPage({
             {/* Shown whenever there is a site to read, not only once it has been read. A feature
                 with no way to start it is a feature nobody has — the audit worked correctly and
                 invisibly for a week because nothing in the application could trigger it. */}
-            {websiteUrl && (
+            {tab === "website" && !websiteUrl && (
+              <Panel title="Their website, page by page">
+                <div style={{ padding: "16px 18px", fontSize: 15.5, color: "var(--ink-2)", lineHeight: 1.55 }}>
+                  No website is stored for this business, so there are no pages to read. Add one on
+                  the Overview tab and this tab fills in once it has been read.
+                </div>
+              </Panel>
+            )}
+            {tab === "website" && websiteUrl && (
               <Panel
                 title={
                   scorecards.length > 0
@@ -1022,6 +862,9 @@ export default async function RecordDetailPage({
               </Panel>
             )}
 
+            {/* The briefing is read before ringing them, so it lives with the rest of what to say. */}
+            {tab === "overview" && (
+            <>
             <div id="summary" style={{ scrollMarginTop: 20 }} />
             <div
               style={{
@@ -1072,10 +915,10 @@ export default async function RecordDetailPage({
                         lineHeight: 1.55,
                       }}
                     >
-                      🏷️ <strong>This may be in the wrong category.</strong> You file them under{" "}
-                      <strong>{business.category ?? "nothing yet"}</strong>. {aiCategoryNote}{" "}
-                      <Link href="/categories">Adjust your rules</Link> — the category itself is only
-                      ever set by your rules, never by this.
+                      🏷️ <strong>This may be in the wrong ICP.</strong> You have them in{" "}
+                      <strong>{business.icp_name ?? "no ICP yet"}</strong>. {aiCategoryNote}{" "}
+                      <Link href="/icps">Adjust your ICPs</Link> — which ICP a business is in is only
+                      ever set by your ICPs, never by this.
                     </div>
                   )}
 
@@ -1095,7 +938,10 @@ export default async function RecordDetailPage({
                 </div>
               )}
             </div>
+            </>
+            )}
 
+            {tab === "checks" && (
             <Panel title={`The biggest problems (${problems.length})`} hint="Ordered by how much each one matters.">
               {problems.length === 0 ? (
                 <div style={{ padding: 18, color: "var(--ink-3)", fontSize: 15.5 }}>
@@ -1117,7 +963,71 @@ export default async function RecordDetailPage({
                 </Note>
               )}
             </Panel>
+            )}
 
+            {/*
+              The call log opens on + Log a call, and only then.
+
+              It used to sit open at the top of this tab, which is the thing the operator asked
+              every form in the product to stop doing: a form nobody has asked for is a question
+              put to them every time they open the page. The panel is a URL (`log=1`), so it needs
+              no JavaScript, and saving closes it by sending them back to this tab.
+            */}
+            {tab === "calls" && (
+              <Panel
+                title="Calls"
+                hint="Every call you log teaches the system which findings actually get replies."
+                tone="brand"
+              >
+                <div style={{ padding: "14px 18px", display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 15.5, color: "var(--ink-2)" }}>
+                    {outcomes && outcomes.length > 0
+                      ? `${outcomes.length} ${outcomes.length === 1 ? "call" : "calls"} logged so far.`
+                      : "No call has been logged for this business yet."}
+                  </span>
+                  <Link href={`/records/${id}?tab=calls&log=1`} className="btn" style={{ marginLeft: "auto", textDecoration: "none" }}>
+                    + Log a call
+                  </Link>
+                </div>
+              </Panel>
+            )}
+
+            {tab === "calls" && message.log === "1" && (
+              <div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
+                <Link
+                  href={`/records/${id}?tab=calls`}
+                  aria-label="Close without saving"
+                  style={{ position: "absolute", inset: 0, background: "rgba(16, 20, 28, 0.45)" }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    width: "min(620px, 100%)",
+                    background: "var(--paper)",
+                    borderLeft: "2px solid var(--rule)",
+                    overflowY: "auto",
+                    padding: "20px 22px 40px",
+                    display: "grid",
+                    gap: 14,
+                    alignContent: "start",
+                    boxShadow: "0 0 60px -10px rgba(16, 20, 28, 0.45)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
+                    <div>
+                      <div style={{ fontSize: 22, fontWeight: 700 }}>Log a call</div>
+                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 3 }}>
+                        {business.display_name}
+                        {phone ? ` · ${phone}` : ""}
+                      </div>
+                    </div>
+                    <Link href={`/records/${id}?tab=calls`} className="btn-2 btn" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
+                      ✕ Close
+                    </Link>
+                  </div>
             <Panel title="After the call, log what happened" hint="This is what teaches the system which findings actually get replies.">
               <form action={logOutcome.bind(null, business.id)} style={{ padding: "16px 18px" }}>
                 <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 14 }}>
@@ -1177,8 +1087,59 @@ export default async function RecordDetailPage({
                 </button>
               </form>
             </Panel>
+                </div>
+              </div>
+            )}
 
-            {outcomes && outcomes.length > 0 && (
+            {tab === "calls" && (
+              <>
+        {businessJobs.length > 0 &&
+          (() => {
+            const live = businessJobs.filter((j) => j.status === "running" || j.status === "queued");
+            return (
+              <div className="card" style={{ marginBottom: 18 }} {...(live.length > 0 ? { "data-tone": "brand" } : {})}>
+                {/*
+                  * Closed unless something is actually running.
+                  *
+                  * Every re-run leaves a row here, so after a few attempts this was five paragraphs
+                  * of finished job summaries sitting between the operator and the record they came
+                  * to read. A `<details>` needs no JavaScript and remembers nothing, which is right:
+                  * the useful default is "hidden", and the exception — a job in flight — opens it by
+                  * itself.
+                  */}
+                <details open={live.length > 0}>
+                  <summary
+                    style={{
+                      padding: "14px 18px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "baseline",
+                      gap: 12,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <span style={{ fontSize: 18, fontWeight: 750, color: "var(--ink)" }}>
+                      What has been run on this business
+                    </span>
+                    <span style={{ fontSize: 14.5, color: "var(--ink-2)" }}>
+                      {live.length > 0
+                        ? `${live.length} running now`
+                        : `${businessJobs.length} finished — click to see`}
+                    </span>
+                  </summary>
+                  <div style={{ padding: "0 18px 16px", borderTop: "1px solid var(--rule)" }}>
+                    {businessJobs.map((job) => (
+                      <JobLine key={job.id} job={job} compact />
+                    ))}
+                  </div>
+                </details>
+              </div>
+            );
+          })()}
+              </>
+            )}
+
+            {tab === "calls" && outcomes && outcomes.length > 0 && (
               <Panel title={`Previous attempts (${outcomes.length})`}>
                 {outcomes.map((o, i) => (
                   <div key={i} style={{ display: "flex", gap: 14, padding: "11px 18px", borderTop: i === 0 ? "none" : "1px solid var(--rule)", fontSize: 15.5 }}>
@@ -1195,82 +1156,298 @@ export default async function RecordDetailPage({
           </div>
 
           {/* ================= RIGHT: why, explained ================= */}
+          {(tab === "overview" || tab === "checks") && (
           <div>
-            <Panel title="Why this lead, in plain terms">
-              <div style={{ padding: "16px 18px" }}>
-                {problem === null ? (
-                  <p style={{ margin: 0, fontSize: 16, color: "var(--ink-2)" }}>
-                    <strong>We could not score this business.</strong>{" "}
-                    {business.route_reason ?? "Too little could be measured."} That is not a judgement
-                    about them — it means we could not read enough to have an opinion.
-                  </p>
-                ) : (
-                  <>
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ ...label, marginBottom: 4 }}>Sell them</div>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: "var(--accent)" }}>
-                        {business.route ? ROUTE_LABELS[business.route] ?? business.route : "Nothing solid enough yet"}
-                      </div>
-                      {business.route_reason && (
-                        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 3 }}>{business.route_reason}</div>
-                      )}
-                    </div>
+            {tab === "overview" && (
+            <>
+        {/*
+          * Everything known about them, in one place, grouped by who told us.
+          *
+          * The operator's report was that opening a business did not show what the system knows.
+          * It was accurate: Google's rating and review count, the YouTube channel, the speed
+          * measurement, the page title and the crawl result were all stored and none of them
+          * appeared anywhere. Grouping by source rather than by subject is deliberate - these facts
+          * have very different reliability, and a screen that mixes them teaches the operator to
+          * trust them equally.
+          */}
+        <Panel
+          title="Everything we know about them"
+          hint="Grouped by where each fact came from, because they are not all equally reliable. Anything blank says so rather than being left empty."
+          tone="info"
+        >
+          <div style={GROUP_HEAD("var(--info-ink)")}>From their Google listing</div>
+          <FactGrid>
+            <Fact label="Rating" value={rating ? <Stars rating={Number(rating)} /> : null} missing="Not bought" from="Google Places" />
+            <Fact
+              label="Reviews"
+              value={reviewCount ? Number(reviewCount).toLocaleString("en-GB") : null}
+              missing="Not bought"
+              from="Google Places"
+            />
+            <Fact label="Phone" value={phone ? <a href={`tel:${phone}`}>{phone}</a> : null} missing="None listed" from="Google Places" />
+            <Fact label="Google files them under" value={googleCategory} missing="Not recorded" from="Google Places" />
+            <Fact
+              label="Still trading?"
+              value={businessStatus === "operational" ? "Yes, operational" : businessStatus}
+              missing="Not checked"
+              from="Google Places"
+              tone={businessStatus === "operational" ? "good" : businessStatus ? "warn" : undefined}
+            />
+            <Fact
+              label="Listing bought?"
+              value={listingOutcome === "ok" ? "Yes, rating and reviews are real" : listingOutcome}
+              missing="Not bought yet"
+              from={listingOutcome ? "3.5c already spent with Google" : "would cost 3.5c with Google"}
+            />
+          </FactGrid>
 
-                    <div style={{ marginBottom: 14 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 4 }}>
-                        <strong>Problem score — how much is wrong</strong>
-                        <span style={{ fontWeight: 700 }}>{problem} / 100</span>
-                      </div>
-                      <Meter value={problem} tone="problem" height={10} />
-                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 4 }}>
-                        {problem >= 55
-                          ? "Above 55, so there is enough wrong here to be worth a call."
-                          : "Below 55 — not much is wrong, so this is a harder conversation to open."}
-                      </div>
-                    </div>
+          <div style={{ ...GROUP_HEAD("var(--good-ink)"), borderTop: "1px solid var(--rule)", marginTop: 4 }}>
+            From their own website &mdash; free, our own crawler
+          </div>
+          <FactGrid>
+            <Fact
+              label="Website"
+              value={domain ? <a href={`https://${domain}`} target="_blank" rel="noreferrer noopener">{domain} &#8599;</a> : null}
+              missing="None found"
+              from={WEBSITE_LABELS[business.website_status] ?? business.website_status}
+            />
+            <Fact label="What the site calls itself" value={site.title} missing="No title tag" from="their home page" />
+            <Fact
+              label="Pages the crawler read"
+              value={site.pagesRead}
+              missing="None read"
+              from={site.crawlOutcome ?? "not crawled"}
+            />
+            {/*
+              * Shown only when a browser did better, which is the case worth explaining. A record
+              * that says "403, 0 pages" directly above five pages of that same site with screenshots
+              * is a record contradicting itself, and the operator read it exactly that way.
+              */}
+            {site.browserPages ? (
+              <Fact
+                label="Pages a browser read"
+                value={site.browserPages}
+                from="the page-by-page audit got in where the crawler was refused"
+                tone="good"
+              />
+            ) : null}
+            <Fact
+              label="Speed on a phone"
+              value={perfScore ? `${perfScore} / 100` : null}
+              missing="No score"
+              from={lcp ? `main content appears in ${(Number(lcp) / 1000).toFixed(1)}s` : "Google PageSpeed, free"}
+              tone={perfScore ? (Number(perfScore) >= 50 ? "good" : "bad") : undefined}
+            />
+            <Fact
+              label="Email on their site"
+              value={contactEmail ? <a href={`mailto:${contactEmail}`}>{contactEmail}</a> : null}
+              missing="None found"
+              from="their own pages"
+            />
+            <Fact label="Phone on their site" value={site.webPhone} missing="None found" from="their own pages" />
+            <Fact
+              label="Who to ask for"
+              value={contactName}
+              missing="Not stated anywhere"
+              from={contactNameSource ? `stated on ${contactNameSource}` : "their about page"}
+            />
+            <Fact label="Server answered" value={site.httpStatus} missing="Never answered" from={site.crawlDetail ?? "our crawler"} />
+          </FactGrid>
 
-                    <div style={{ marginBottom: 16 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 15, marginBottom: 4 }}>
-                        <strong>Buying signals — do they spend money?</strong>
-                        <span style={{ fontWeight: 700 }}>{intent ?? 0} / 100</span>
-                      </div>
-                      <Meter value={intent} tone="good" height={10} />
-                      <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 4 }}>
-                        {(intent ?? 0) >= 35
-                          ? "Above 35 — they already pay for tools or advertising, so there is a budget."
-                          : "Below 35 — we found little sign they currently pay for anything."}
-                      </div>
-                    </div>
+          <div style={{ ...GROUP_HEAD("var(--social-ink)"), borderTop: "1px solid var(--rule)", marginTop: 4 }}>
+            Away from their own site
+          </div>
+          <FactGrid>
+            <Fact
+              label="Instagram"
+              value={
+                instagram.handle ? (
+                  <a href={instagram.url ?? `https://instagram.com/${instagram.handle}`} target="_blank" rel="noreferrer noopener">
+                    @{instagram.handle} &#8599;
+                  </a>
+                ) : null
+              }
+              missing="No account known"
+              from={instagram.url ? "found on their website, or typed in" : "paste one below if you know it"}
+            />
+            <Fact
+              label="Followers"
+              value={instagram.followers ? Number(instagram.followers).toLocaleString("en-GB") : null}
+              missing="Not bought"
+              from={instagram.followers ? "Apify, 0.26c already spent" : "would cost 0.26c with Apify"}
+              size="large"
+              tone={instagram.followers && Number(instagram.followers) >= 10000 ? "good" : undefined}
+            />
+            <Fact label="Posts" value={instagram.posts} missing="Not bought" from="Apify" />
+            <Fact label="Instagram files them under" value={instagram.category} missing="Not bought" from="Apify" />
+            <Fact
+              label="Facebook"
+              value={metaAds.page ? <a href={metaAds.page} target="_blank" rel="noreferrer noopener">Their page &#8599;</a> : null}
+              missing="None found"
+              from="linked from their website"
+            />
+            <Fact
+              label="Running ads?"
+              value={
+                metaAds.running === "true"
+                  ? `Yes, ${metaAds.activeCount ?? "some"} live`
+                  : metaAds.running === "false"
+                    ? "No ads running"
+                    : null
+              }
+              missing="Never checked"
+              from={metaAds.checkedAt ? "Meta Ad Library, already bought" : "would cost 11.6c with Apify"}
+              tone={metaAds.running === "true" ? "good" : undefined}
+            />
+            <Fact
+              label="YouTube"
+              value={youtube.channel}
+              missing={youtube.outcome === "failed" ? "No channel found" : "Not checked"}
+              from={
+                youtube.latestVideoAt
+                  ? `last video ${new Date(youtube.latestVideoAt).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}`
+                  : "YouTube Data API, free"
+              }
+            />
+          </FactGrid>
 
-                    {/* The question the operator actually asked: why is this Priority 1? */}
-                    <div style={{ padding: "13px 14px", background: "var(--surface-2)", borderRadius: 5 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                        <TierBadge tier={business.tier} />
-                        <strong style={{ fontSize: 16 }}>
-                          {business.tier ? `Priority ${business.tier}` : "No priority"}
-                        </strong>
+          {instagram.bio && (
+            <div style={{ padding: "0 18px 16px" }}>
+              <div style={{ fontSize: 13.5, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--ink-2)", fontWeight: 800 }}>
+                What their Instagram bio says
+              </div>
+              <div style={{ fontSize: 15.5, color: "var(--ink)", marginTop: 4, lineHeight: 1.6, whiteSpace: "pre-wrap", maxWidth: 720 }}>
+                {instagram.bio}
+              </div>
+            </div>
+          )}
+        </Panel>
+
+            </>
+            )}
+            {tab === "overview" && (
+            <Panel
+              title="Instagram and ads"
+              hint="What they do away from their own website, and whether they already pay to be seen."
+            >
+              <div style={{ padding: "14px 18px", display: "grid", gap: 16 }}>
+                <div>
+                  <div style={label}>Instagram</div>
+                  {instagram.handle ? (
+                    <>
+                      <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>
+                        <a href={`https://instagram.com/${instagram.handle}`} target="_blank" rel="noreferrer noopener">
+                          @{instagram.handle} &#8599;
+                        </a>
+                        {instagram.verified === "true" ? (
+                          <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}> &middot; verified</span>
+                        ) : null}
                       </div>
-                      <div style={{ fontSize: 15, color: "var(--ink-2)", lineHeight: 1.55 }}>
-                        {business.tier ? (
+                      <div style={{ display: "flex", gap: 24, marginTop: 9, flexWrap: "wrap" }}>
+                        <Figure
+                          value={instagram.followers ? Number(instagram.followers).toLocaleString() : "not shown"}
+                          label="followers"
+                        />
+                        <Figure value={instagram.posts ? Number(instagram.posts).toLocaleString() : "—"} label="posts" />
+                        <Figure value={instagram.category ?? "—"} label="Instagram's own category" />
+                      </div>
+                      {instagram.bio ? (
+                        <p style={{ fontSize: 15, color: "var(--ink-2)", margin: "11px 0 0", lineHeight: 1.5 }}>
+                          &ldquo;{instagram.bio}&rdquo;
+                        </p>
+                      ) : null}
+                      {instagram.isPrivate === "true" ? (
+                        <p style={{ fontSize: 14.5, color: "var(--ink-3)", margin: "7px 0 0", lineHeight: 1.45 }}>
+                          This account is private, so Instagram withholds the follower count. That is
+                          why it reads &ldquo;not shown&rdquo; rather than zero.
+                        </p>
+                      ) : null}
+                    </>
+                  ) : !instagram.url ? (
+                    /* No link, and no way for the crawler to find one — this business has no site
+                       to crawl. Typing it is the only route, and it is the route to Priority 1:
+                       10,000 followers qualifies on its own. */
+                    <form action={saveInstagramUrl} style={{ marginTop: 6 }}>
+                      <input type="hidden" name="id" value={id} />
+                      <div style={{ fontSize: 15, color: "var(--ink-2)", marginBottom: 7, lineHeight: 1.55 }}>
+                        {business.website_status === "unclear" ? (
                           <>
-                            {TIER_MEANING[business.tier]}.
-                            <div style={{ marginTop: 7, color: "var(--ink-3)", fontSize: 14.5 }}>
-                              Worked out from exactly two comparisons: problem score{" "}
-                              <strong>{problem}</strong> is {problem >= 55 ? "above" : "below"} 55, and
-                              buying signals <strong>{intent ?? 0}</strong> {(intent ?? 0) >= 35 ? "above" : "below"}{" "}
-                              35. Nothing else changes the priority.
-                            </div>
+                            No website to find one on, so nobody can look this up for you. Paste it
+                            and a large following can carry them to Priority 1 on its own.
                           </>
                         ) : (
-                          "Not enough was measured to place this business."
+                          <>No Instagram link was found on their website. Paste one if you know it.</>
                         )}
                       </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <input
+                          name="instagram"
+                          placeholder="instagram.com/theirname"
+                          style={{ ...input, flex: "1 1 210px", minWidth: 0 }}
+                        />
+                        <button className="btn-2 btn" type="submit" style={{ fontSize: 15 }}>
+                          Save
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
+                      Their website links to{" "}
+                      <a href={instagram.url} target="_blank" rel="noreferrer noopener">
+                        an Instagram account
+                      </a>
+                      , and nobody has looked it up yet. Tick this business on the leads list to buy
+                      it &mdash; it costs a fraction of a cent.
                     </div>
-                  </>
-                )}
+                  )}
+                </div>
+
+                <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 14 }}>
+                  <div style={label}>Facebook &amp; Instagram ads</div>
+                  {metaAds.checkedAt ? (
+                    <>
+                      <div style={{ fontSize: 17.5, fontWeight: 600, marginTop: 3 }}>
+                        {metaAds.running === "true"
+                          ? `Running ${metaAds.activeCount ?? ""} ad${metaAds.activeCount === "1" ? "" : "s"} right now`
+                          : "Not running any ads"}
+                      </div>
+                      {metaAds.since ? (
+                        <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 2 }}>
+                          advertising since {metaAds.since}
+                          {metaAds.platforms ? ` on ${metaAds.platforms}` : ""}
+                        </div>
+                      ) : null}
+                      {metaAds.sample ? (
+                        <p style={{ fontSize: 14.5, color: "var(--ink-2)", margin: "10px 0 0", lineHeight: 1.5 }}>
+                          &ldquo;{metaAds.sample.split(" \u23D0 ")[0]}&rdquo;
+                        </p>
+                      ) : null}
+                      <p style={{ fontSize: 14.5, color: "var(--ink-3)", margin: "11px 0 0", lineHeight: 1.45 }}>
+                        <strong>What they spend is not shown, and cannot be.</strong> Meta publishes
+                        ad spend only for political and social-issue ads; for an ordinary business it
+                        is empty in Meta&rsquo;s own Ad Library, so no tool or provider can supply
+                        it at any price.
+                      </p>
+                    </>
+                  ) : metaAds.page ? (
+                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4, lineHeight: 1.5 }}>
+                      They have{" "}
+                      <a href={metaAds.page} target="_blank" rel="noreferrer noopener">
+                        a Facebook page
+                      </a>
+                      , and nobody has checked whether it is running ads.
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 15, color: "var(--ink-3)", marginTop: 4 }}>
+                      No Facebook page was found on their website.
+                    </div>
+                  )}
+                </div>
               </div>
             </Panel>
+            )}
 
+            {tab === "checks" && (
             <Panel
               title="Score by area"
               hint="Each area is scored only on the checks we could actually run for it. 100 means everything we checked was wrong."
@@ -1293,7 +1470,9 @@ export default async function RecordDetailPage({
                 </div>
               ))}
             </Panel>
+            )}
 
+            {tab === "checks" && (
             <Panel
               title="How busy is their website?"
               hint="An honest signal, not a visitor count — see the note below."
@@ -1334,10 +1513,14 @@ export default async function RecordDetailPage({
                 honest free version: Google either has real visit data for the site, or it does not.
               </Note>
             </Panel>
+            )}
           </div>
+          )}
         </div>
 
-        {/* ---- Folded detail ---- */}
+        {/* ---- Folded detail: every check, and where every value came from ---- */}
+        {tab === "checks" && (
+        <>
         <h2 style={{ fontSize: 15, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ink-3)", margin: "26px 0 12px" }}>
           The full detail
         </h2>
@@ -1408,6 +1591,8 @@ export default async function RecordDetailPage({
             ))}
           </div>
         </details>
+        </>
+        )}
       </>
     </AppShell>
   );

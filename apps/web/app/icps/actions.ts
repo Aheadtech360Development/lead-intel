@@ -1,7 +1,7 @@
 "use server";
 
 import {
-  EXAMPLE_CATEGORY_RULES,
+  EXAMPLE_ICPS,
   SUGGEST_RULE_SYSTEM,
   buildSuggestRulePrompt,
   parseSuggestedRule,
@@ -11,7 +11,7 @@ import { callGemini, parseJsonAnswer } from "@lead-intel/providers";
 // task would drag the worker's whole dependency tree — Drizzle, the database driver, the
 // providers — into the web bundle, which is both wrong and what broke the build when it was
 // written that way. The task id is a string; only its payload type is needed here.
-import type { categoriseRunTask } from "@lead-intel/jobs/categorise";
+import type { matchIcpsRunTask } from "@lead-intel/jobs/match-icps";
 import { tasks } from "@trigger.dev/sdk";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -59,19 +59,19 @@ function optionalNumber(value: FormDataEntryValue | null): number | null {
 export async function suggestRule(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
-  if (typeof data?.claims?.sub !== "string") redirect("/categories?error=You+are+not+signed+in.");
+  if (typeof data?.claims?.sub !== "string") redirect("/icps?error=You+are+not+signed+in.");
 
   const description = String(formData.get("description") ?? "").trim();
   if (description.length < 10) {
     redirect(
-      `/categories?error=${encodeURIComponent(
+      `/icps?error=${encodeURIComponent(
         "Describe what you are looking for in a sentence or two — a few words is not enough to pick keywords from.",
       )}#write`,
     );
   }
 
   const [{ data: existing }, { data: samples }] = await Promise.all([
-    supabase.from("category_rules").select("name, category, subcategory").limit(50),
+    supabase.from("icps").select("name, industry").limit(50),
     // Real wording from the operator's own list. Without it the model proposes textbook trade
     // vocabulary; with it, terms come from how these businesses actually write about themselves.
     supabase.from("field_metadata").select("value").eq("field_name", "site_text").limit(12),
@@ -84,8 +84,7 @@ export async function suggestRule(formData: FormData): Promise<void> {
       description,
       existingRules: (existing ?? []).map((r) => ({
         name: r.name,
-        category: r.category,
-        subcategory: r.subcategory,
+        industry: r.industry,
       })),
       sampleSiteText: (samples ?? []).map((s) => s.value as string),
     }),
@@ -95,7 +94,7 @@ export async function suggestRule(formData: FormData): Promise<void> {
 
   if (!result.ok) {
     redirect(
-      `/categories?error=${encodeURIComponent(
+      `/icps?error=${encodeURIComponent(
         `Could not get a suggestion: ${result.detail} Nothing was changed — you can still write the rule by hand below.`,
       )}#write`,
     );
@@ -104,13 +103,13 @@ export async function suggestRule(formData: FormData): Promise<void> {
   const parsedJson = parseJsonAnswer<unknown>(result);
   if (!parsedJson.ok) {
     redirect(
-      `/categories?error=${encodeURIComponent(`The model's answer could not be read: ${parsedJson.detail}`)}#write`,
+      `/icps?error=${encodeURIComponent(`The model's answer could not be read: ${parsedJson.detail}`)}#write`,
     );
   }
 
   const suggested = parseSuggestedRule(parsedJson.value);
   if (!suggested.ok) {
-    redirect(`/categories?error=${encodeURIComponent(suggested.detail)}#write`);
+    redirect(`/icps?error=${encodeURIComponent(suggested.detail)}#write`);
   }
 
   const rule = suggested.rule;
@@ -120,8 +119,8 @@ export async function suggestRule(formData: FormData): Promise<void> {
     preview: "1",
     ai: "1",
     name: rule.name,
-    category: rule.category,
-    subcategory: rule.subcategory ?? "",
+    industry: rule.industry,
+    searchTerms: rule.searchTerms.join(", "),
     priority: "50",
     anyOf: rule.anyOf.join(", "),
     websiteAnyOf: rule.websiteAnyOf.join(", "),
@@ -135,21 +134,21 @@ export async function suggestRule(formData: FormData): Promise<void> {
   if (rule.minFollowers !== null) query.set("minFollowers", String(rule.minFollowers));
   if (rule.maxFollowers !== null) query.set("maxFollowers", String(rule.maxFollowers));
 
-  redirect(`/categories?${query.toString()}#write`);
+  redirect(`/icps?${query.toString()}#write`);
 }
 
 export async function saveRule(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
-  if (typeof userId !== "string") redirect("/categories?error=You+are+not+signed+in.");
+  if (typeof userId !== "string") redirect("/icps?error=You+are+not+signed+in.");
 
   const id = String(formData.get("id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
-  const category = String(formData.get("category") ?? "").trim();
+  const industry = String(formData.get("industry") ?? "").trim();
 
-  if (!name || !category) {
-    redirect(`/categories?error=${encodeURIComponent("A rule needs a name and a category.")}`);
+  if (!name || !industry) {
+    redirect(`/icps?error=${encodeURIComponent("An ICP needs a name and an industry.")}`);
   }
 
   const anyOf = terms(formData.get("anyOf"));
@@ -160,13 +159,22 @@ export async function saveRule(formData: FormData): Promise<void> {
   const requireAll = formData.get("requireAll") === "on";
   const groupsFilled = [anyOf, websiteAnyOf, instagramAnyOf].filter((g) => g.length > 0).length;
 
+  // The conditions. Each is a claim about a fact, so each can also carry an ICP on its own — an
+  // ICP of "anyone in Texas with 20 reviews" is a real thing to want and needs no words at all.
+  const requiresWebsite = formData.get("requiresWebsite") === "on";
+  const minReviews = optionalNumber(formData.get("minReviews"));
+  const places = terms(formData.get("places"));
+  const searchTerms = terms(formData.get("searchTerms"));
+  const gated = requiresWebsite || minReviews !== null || places.length > 0;
+
   // A rule with neither terms nor a follower gate matches nothing at all — the matcher ignores it
   // on purpose. Saying so here is better than saving it and letting the operator wonder why it
   // never fires.
-  if (groupsFilled === 0 && minFollowers === null && maxFollowers === null) {
+  if (groupsFilled === 0 && minFollowers === null && maxFollowers === null && !gated) {
     redirect(
-      `/categories?error=${encodeURIComponent(
-        "This rule has nothing to match on. Add some words to at least one of the three boxes, or a follower range.",
+      `/icps?error=${encodeURIComponent(
+        "This ICP has nothing to recognise a business by. Add some words to at least one of the three boxes, " +
+          "or set a condition such as a follower range, a review count or a place.",
       )}`,
     );
   }
@@ -176,7 +184,7 @@ export async function saveRule(formData: FormData): Promise<void> {
   // the operator who ticks it is expecting a stricter rule than they are about to get.
   if (requireAll && groupsFilled < 2) {
     redirect(
-      `/categories?error=${encodeURIComponent(
+      `/icps?error=${encodeURIComponent(
         "“Must match every box” needs at least two boxes filled in — that is what makes it stricter. " +
           "With one box it would behave exactly like the normal setting.",
       )}`,
@@ -185,8 +193,7 @@ export async function saveRule(formData: FormData): Promise<void> {
 
   const row = {
     name,
-    category,
-    subcategory: String(formData.get("subcategory") ?? "").trim() || null,
+    industry,
     priority: Number(formData.get("priority") ?? 100) || 100,
     enabled: formData.get("enabled") === "on",
     sources: formData.getAll("sources").map(String).filter(Boolean),
@@ -197,30 +204,34 @@ export async function saveRule(formData: FormData): Promise<void> {
     require_all: requireAll,
     min_followers: minFollowers,
     max_followers: maxFollowers,
+    search_terms: searchTerms,
+    requires_website: requiresWebsite,
+    min_reviews: minReviews,
+    places,
     updated_at: new Date().toISOString(),
   };
 
   const { error } = id
-    ? await supabase.from("category_rules").update(row).eq("id", id)
-    : await supabase.from("category_rules").insert({ ...row, created_by: userId });
+    ? await supabase.from("icps").update(row).eq("id", id)
+    : await supabase.from("icps").insert({ ...row, created_by: userId });
 
-  if (error) redirect(`/categories?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/icps?error=${encodeURIComponent(error.message)}`);
 
-  revalidatePath("/categories");
-  redirect("/categories?saved=1");
+  revalidatePath("/icps");
+  redirect("/icps?saved=1");
 }
 
 export async function deleteRule(formData: FormData): Promise<void> {
   const id = String(formData.get("id") ?? "");
   if (id) {
     const supabase = await createClient();
-    const { error: deleteError } = await supabase.from("category_rules").delete().eq("id", id);
+    const { error: deleteError } = await supabase.from("icps").delete().eq("id", id);
   if (deleteError) {
-    redirect(`/categories?error=${encodeURIComponent(`Could not delete the rule: ${deleteError.message}`)}`);
+    redirect(`/icps?error=${encodeURIComponent(`Could not delete the rule: ${deleteError.message}`)}`);
   }
   }
-  revalidatePath("/categories");
-  redirect("/categories?saved=1");
+  revalidatePath("/icps");
+  redirect("/icps?saved=1");
 }
 
 /** Seeds the starter rules, so the first screen is never an empty form. */
@@ -228,14 +239,13 @@ export async function addExampleRules(): Promise<void> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
-  if (typeof userId !== "string") redirect("/categories?error=You+are+not+signed+in.");
+  if (typeof userId !== "string") redirect("/icps?error=You+are+not+signed+in.");
 
-  const { error } = await supabase.from("category_rules").insert(
-    EXAMPLE_CATEGORY_RULES.map((r) => ({
+  const { error } = await supabase.from("icps").insert(
+    EXAMPLE_ICPS.map((r) => ({
       created_by: userId,
       name: r.name,
-      category: r.category,
-      subcategory: r.subcategory,
+      industry: r.industry,
       priority: r.priority,
       enabled: true,
       sources: r.sources,
@@ -246,12 +256,16 @@ export async function addExampleRules(): Promise<void> {
       require_all: r.requireAll,
       min_followers: r.minFollowers,
       max_followers: r.maxFollowers,
+      search_terms: r.searchTerms,
+      requires_website: r.requiresWebsite,
+      min_reviews: r.minReviews,
+      places: r.places,
     })),
   );
-  if (error) redirect(`/categories?error=${encodeURIComponent(error.message)}`);
+  if (error) redirect(`/icps?error=${encodeURIComponent(error.message)}`);
 
-  revalidatePath("/categories");
-  redirect("/categories?saved=1");
+  revalidatePath("/icps");
+  redirect("/icps?saved=1");
 }
 
 /**
@@ -263,11 +277,11 @@ export async function addExampleRules(): Promise<void> {
 export async function applyRules(): Promise<void> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
-  if (typeof data?.claims?.sub !== "string") redirect("/categories?error=You+are+not+signed+in.");
+  if (typeof data?.claims?.sub !== "string") redirect("/icps?error=You+are+not+signed+in.");
 
   const jobRunId = await startJobRun(supabase, {
-    kind: "categorise-run",
-    label: "Sorting every business into its category",
+    kind: "match-icps-run",
+    label: "Matching every business against your ICPs",
   });
 
   // Checked before the SDK is called. A missing key otherwise surfaces as an SDK error nobody can
@@ -277,20 +291,20 @@ export async function applyRules(): Promise<void> {
   const blocked = enqueueBlockedBecause();
   if (blocked.blocked) {
     await failJobRun(supabase, jobRunId, blocked.why);
-    redirect(`/categories?error=${encodeURIComponent(blocked.why)}`);
+    redirect(`/icps?error=${encodeURIComponent(blocked.why)}`);
   }
 
   try {
-    const handle = await tasks.trigger<typeof categoriseRunTask>("categorise-run", { jobRunId });
+    const handle = await tasks.trigger<typeof matchIcpsRunTask>("match-icps-run", { jobRunId });
     await attachTriggerRun(supabase, jobRunId ?? null, handle.id);
   } catch (err) {
     await failJobRun(supabase, jobRunId, explainEnqueueFailure(err));
     redirect(
-      `/categories?error=${encodeURIComponent(
+      `/icps?error=${encodeURIComponent(
         explainEnqueueFailure(err),
       )}`,
     );
   }
 
-  redirect("/categories?applied=1");
+  redirect("/icps?applied=1");
 }

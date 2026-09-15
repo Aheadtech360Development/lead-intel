@@ -7,7 +7,7 @@
     "./analyse": "./trigger/analyse-run.ts",
     "./discovery": "./trigger/discovery.ts",
     "./enrich": "./trigger/enrich-run.ts",
-    "./categorise": "./trigger/categorise.ts",
+    "./match-icps": "./trigger/match-icps.ts",
     "./audit-site": "./trigger/audit-site.ts",
     "./audit-site-run": "./trigger/audit-site-run.ts",
     "./score": "./trigger/score-run.ts"

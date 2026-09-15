@@ -101,8 +101,8 @@ export interface ChecklistRule {
   name: string;
   /** Null means every page type. */
   pageType: PageType | null;
-  /** Null means every category — that is where the universal rules live. */
-  category: string | null;
+  /** Null means every industry — that is where the universal rules live. */
+  industry: string | null;
   field: string;
   test: ChecklistTest;
   /** Only read by at_least, at_most and equals. */
@@ -127,7 +127,8 @@ export interface ChecklistResult {
 
 export interface PageFactsForChecklist {
   pageType: PageType;
-  category: string | null;
+  /** The industry of the business's ICP. Null when no ICP matched it yet. */
+  industry: string | null;
   structure: PageStructure | null;
   /** Null when the page did not render, or when the layout probe failed. */
   layout: Record<string, unknown> | null;
@@ -137,10 +138,10 @@ export interface PageFactsForChecklist {
 export function ruleApplies(rule: ChecklistRule, facts: PageFactsForChecklist): boolean {
   if (!rule.enabled) return false;
   if (rule.pageType !== null && rule.pageType !== facts.pageType) return false;
-  // A rule with no category is universal; one with a category only applies to that category. A
-  // business with no category yet is therefore judged on the universal rules alone, which is right
+  // A rule with no industry is universal; one with an industry only applies to that industry. A
+  // business in no ICP yet is therefore judged on the universal rules alone, which is right
   // — nobody has said what kind of business it is.
-  if (rule.category !== null && rule.category !== facts.category) return false;
+  if (rule.industry !== null && rule.industry !== facts.industry) return false;
   return true;
 }
 
@@ -251,7 +252,7 @@ function describe(value: unknown): string | null {
 /**
  * A starting set, so the editor is never an empty screen.
  *
- * Three kinds, and the split matters. The universal ones carry no category and no page type: they
+ * Three kinds, and the split matters. The universal ones carry no industry and no page type: they
  * are true of any page on any business's site, and they stay true when the operator moves into a
  * different trade. The per-page ones are still trade-agnostic — a contact page needs a form
  * whatever the business does. Only the last group assumes printing and apparel, and that is the
@@ -266,7 +267,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Exactly one main heading",
     pageType: null,
-    category: null,
+    industry: null,
     field: "hero.h1Count",
     test: "equals",
     value: 1,
@@ -276,7 +277,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Does not scroll sideways",
     pageType: null,
-    category: null,
+    industry: null,
     field: "layout.scrollsSideways",
     test: "is_false",
     value: null,
@@ -286,7 +287,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "No broken images",
     pageType: null,
-    category: null,
+    industry: null,
     field: "layout.brokenImages",
     test: "at_most",
     value: 0,
@@ -296,7 +297,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Tap targets big enough for a finger",
     pageType: null,
-    category: null,
+    industry: null,
     field: "layout.smallTapTargets",
     test: "at_most",
     // Twenty-five, not five. Five was the first guess and it failed every one of the first seven
@@ -316,7 +317,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Phone in the header",
     pageType: "home",
-    category: null,
+    industry: null,
     field: "header.phone",
     test: "present",
     value: null,
@@ -326,7 +327,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Something to click above the fold",
     pageType: "home",
-    category: null,
+    industry: null,
     field: "layout.ctaAboveFold",
     test: "present",
     value: null,
@@ -336,7 +337,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Address in the footer",
     pageType: "home",
-    category: null,
+    industry: null,
     field: "footer.hasAddress",
     test: "is_true",
     value: null,
@@ -346,7 +347,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Contact page has a form",
     pageType: "contact",
-    category: null,
+    industry: null,
     field: "forms.count",
     test: "at_least",
     value: 1,
@@ -356,7 +357,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Enquiry form is short",
     pageType: "contact",
-    category: null,
+    industry: null,
     field: "forms.fields",
     test: "at_most",
     value: 5,
@@ -368,7 +369,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Home page shows reviews",
     pageType: "home",
-    category: "Printing",
+    industry: "Printing",
     field: "reviews.present",
     test: "is_true",
     value: null,
@@ -378,7 +379,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Reviews carry names",
     pageType: "home",
-    category: "Printing",
+    industry: "Printing",
     field: "reviews.named",
     test: "at_least",
     value: 1,
@@ -388,7 +389,7 @@ export const EXAMPLE_CHECKLIST_RULES: Omit<ChecklistRule, "id" | "enabled">[] = 
   {
     name: "Product pages prove the work",
     pageType: "products",
-    category: "Printing",
+    industry: "Printing",
     field: "reviews.present",
     test: "is_true",
     value: null,

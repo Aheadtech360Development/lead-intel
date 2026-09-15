@@ -2,7 +2,7 @@ import { BUSINESS_ORIGIN_LABELS } from "@lead-intel/shared";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "../../actions";
-import { AppShell, Banner, Note, PANEL, Panel, TD, Th } from "../../ui";
+import { AppShell, Banner, Note, PANEL, Panel, TD, Th, StageStrip } from "../../ui";
 import { deleteImportBatch } from "./actions";
 
 /**
@@ -59,6 +59,7 @@ export default async function ImportsPage({
       }
     >
       <>
+        <StageStrip current="sourcing" />
         {error && (
           <Banner tone="bad">{decodeURIComponent(error)}</Banner>
         )}

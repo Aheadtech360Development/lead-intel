@@ -275,17 +275,17 @@ export default async function ImportPage({
                 defaultChecked
                 icon="🏷️"
                 tone="social"
-                title="Sort them into my categories"
+                title="Match them to my ICPs"
                 price="Free"
                 describes={
                   <>
-                    Runs your{" "}
-                    <Link href="/categories" target="_blank">
-                      category rules
+                    Matches these businesses against your{" "}
+                    <Link href="/icps" target="_blank">
+                      ICPs
                     </Link>{" "}
-                    over these businesses once their websites have been read, so the file arrives
-                    already labelled. Runs after the crawl, never alongside it — a rule looking for a
-                    word on a website needs the website read first.
+                    once their websites have been read, so the file arrives already labelled. Runs
+                    after the crawl, never alongside it — an ICP looking for a word on a website needs
+                    the website read first.
                   </>
                 }
               />

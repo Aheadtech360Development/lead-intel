@@ -1,0 +1,487 @@
+{
+  "pages": [
+    {
+      "id": "work",
+      "name": "Daily work"
+    },
+    {
+      "id": "add",
+      "name": "Adding businesses"
+    },
+    {
+      "id": "setup",
+      "name": "Instagram & set up"
+    },
+    {
+      "id": "shared",
+      "name": "Sign in & shared pieces"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1460,
+      "title": "Leads · three steps",
+      "page": "work"
+    },
+    {
+      "file": "LeadsFilter.dc.html",
+      "x": 1600,
+      "y": 0,
+      "w": 1440,
+      "h": 1460,
+      "title": "Leads · choosing a filter",
+      "page": "work"
+    },
+    {
+      "file": "LeadsActions.dc.html",
+      "x": 3200,
+      "y": 0,
+      "w": 1440,
+      "h": 1460,
+      "title": "Leads · doing something",
+      "page": "work"
+    },
+    {
+      "file": "LeadOverview.dc.html",
+      "x": 4800,
+      "y": 0,
+      "w": 1440,
+      "h": 1380,
+      "title": "Lead · Overview",
+      "page": "work"
+    },
+    {
+      "file": "LeadWebsite.dc.html",
+      "x": 0,
+      "y": 1920,
+      "w": 1440,
+      "h": 1720,
+      "title": "Lead · Website pages",
+      "page": "work"
+    },
+    {
+      "file": "LeadChecks.dc.html",
+      "x": 1600,
+      "y": 1920,
+      "w": 1440,
+      "h": 1560,
+      "title": "Lead · Checks & scores",
+      "page": "work"
+    },
+    {
+      "file": "LeadCalls.dc.html",
+      "x": 3200,
+      "y": 1920,
+      "w": 1440,
+      "h": 920,
+      "title": "Lead · Calls & history",
+      "page": "work"
+    },
+    {
+      "file": "LeadCallsLog.dc.html",
+      "x": 4800,
+      "y": 1920,
+      "w": 1440,
+      "h": 920,
+      "title": "Lead · logging a call",
+      "page": "work"
+    },
+    {
+      "file": "BuyData.dc.html",
+      "x": 0,
+      "y": 4100,
+      "w": 1440,
+      "h": 1240,
+      "title": "Buy extra data",
+      "page": "work"
+    },
+    {
+      "file": "Dashboard.dc.html",
+      "x": 1600,
+      "y": 4100,
+      "w": 1440,
+      "h": 1560,
+      "title": "Dashboard",
+      "page": "work"
+    },
+    {
+      "file": "FindBusinesses.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 940,
+      "title": "Find businesses",
+      "page": "add"
+    },
+    {
+      "file": "ConfirmSearch.dc.html",
+      "x": 1600,
+      "y": 0,
+      "w": 1440,
+      "h": 920,
+      "title": "Check the cost",
+      "page": "add"
+    },
+    {
+      "file": "SearchRun.dc.html",
+      "x": 3200,
+      "y": 0,
+      "w": 1440,
+      "h": 960,
+      "title": "Search in progress",
+      "page": "add"
+    },
+    {
+      "file": "ImportUpload.dc.html",
+      "x": 4800,
+      "y": 0,
+      "w": 1440,
+      "h": 920,
+      "title": "Import a list",
+      "page": "add"
+    },
+    {
+      "file": "ImportPreview.dc.html",
+      "x": 0,
+      "y": 1420,
+      "w": 1440,
+      "h": 1040,
+      "title": "Check your file",
+      "page": "add"
+    },
+    {
+      "file": "ImportedFiles.dc.html",
+      "x": 1600,
+      "y": 1420,
+      "w": 1440,
+      "h": 920,
+      "title": "Imported files",
+      "page": "add"
+    },
+    {
+      "file": "ImportDetail.dc.html",
+      "x": 3200,
+      "y": 1420,
+      "w": 1440,
+      "h": 960,
+      "title": "One imported file",
+      "page": "add"
+    },
+    {
+      "file": "AddByHand.dc.html",
+      "x": 4800,
+      "y": 1420,
+      "w": 1440,
+      "h": 920,
+      "title": "Add one by hand",
+      "page": "add"
+    },
+    {
+      "file": "Instagram.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 960,
+      "title": "Instagram",
+      "page": "setup"
+    },
+    {
+      "file": "Icp.dc.html",
+      "x": 1600,
+      "y": 0,
+      "w": 1440,
+      "h": 1180,
+      "title": "ICPs",
+      "page": "setup"
+    },
+    {
+      "file": "IcpAdd.dc.html",
+      "x": 3200,
+      "y": 0,
+      "w": 1440,
+      "h": 1700,
+      "title": "ICPs · adding one",
+      "page": "setup"
+    },
+    {
+      "file": "Checklists.dc.html",
+      "x": 4800,
+      "y": 0,
+      "w": 1440,
+      "h": 960,
+      "title": "Checklists",
+      "page": "setup"
+    },
+    {
+      "file": "ChecklistsAdd.dc.html",
+      "x": 0,
+      "y": 2160,
+      "w": 1440,
+      "h": 960,
+      "title": "Checklists · adding a rule",
+      "page": "setup"
+    },
+    {
+      "file": "HowItWorks.dc.html",
+      "x": 1600,
+      "y": 2160,
+      "w": 1440,
+      "h": 1600,
+      "title": "How it works",
+      "page": "setup"
+    },
+    {
+      "file": "DataSpend.dc.html",
+      "x": 3200,
+      "y": 2160,
+      "w": 1440,
+      "h": 1500,
+      "title": "Data & spend",
+      "page": "setup"
+    },
+    {
+      "file": "Login.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 920,
+      "title": "Sign in",
+      "page": "shared"
+    },
+    {
+      "file": "SharedPieces.dc.html",
+      "x": 1600,
+      "y": 0,
+      "w": 1440,
+      "h": 3420,
+      "title": "Shared pieces",
+      "page": "shared"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "note-main",
+      "x": 0,
+      "y": 1500,
+      "w": 760,
+      "text": "LEADS — three steps, top to bottom.\n\n1. Choose which businesses: search plus one menu per filter (Priority, Colour, Website…). Every choice shows as a chip under the menus with ✕ to remove it, and the count of what is left.\n2. Tick the ones you want — or none.\n3. Do something with them: one button opens every action with its price.\n\n• Only what you chose is shown. Columns, widths and buttons never move when a filter changes.\n• Colour is a filter like any other; the key sits above the table.\n• ICP is the first filter — it is how the list is narrowed to your customers.\n• Budget and revenue are visibly off with the reason on hover.",
+      "page": "work"
+    },
+    {
+      "id": "note-leadsfilter",
+      "x": 1600,
+      "y": 1500,
+      "w": 760,
+      "text": "LEADS — one filter menu open.\n\n• Each menu lists its options with how many businesses each gives.\n• Show these applies it and adds the chip. Nothing else on the page moves.",
+      "page": "work"
+    },
+    {
+      "id": "note-leadsactions",
+      "x": 3200,
+      "y": 1500,
+      "w": 760,
+      "text": "LEADS — step 3 open.\n\n• Replaces the old scattered buttons (whole-list actions, ticked actions, paid data for all).\n• First: which businesses — the ticked ones or all shown.\n• Then: one action, each with its price and who bills it.\n• The total sits next to the Start button. Paid data still goes to its own confirm screen.",
+      "page": "work"
+    },
+    {
+      "id": "note-leadoverview",
+      "x": 4800,
+      "y": 1420,
+      "w": 760,
+      "text": "ONE BUSINESS — split into four tabs so nothing is buried.\n\n• Header: who they are, how to reach them, priority, and every action on this business.\n• Full analysis = read site + 51 checks + browser page read + re-score, in that order.\n• Overview: why this lead, what to say, and everything known — grouped by source, never a blank.",
+      "page": "work"
+    },
+    {
+      "id": "note-leadwebsite",
+      "x": 0,
+      "y": 3680,
+      "w": 760,
+      "text": "WEBSITE PAGES tab.\n\n• One card per page read in a real browser: score, checks it failed, the model's read, a line to open the call with.\n• Screenshots only for the home and product pages.\n• Verdicts follow the checklists, so editing a checklist changes these immediately.",
+      "page": "work"
+    },
+    {
+      "id": "note-leadchecks",
+      "x": 1600,
+      "y": 3520,
+      "w": 760,
+      "text": "CHECKS & SCORES tab.\n\n• Score by area (higher = more wrong), the biggest problems with evidence, speed.\n• Every one of the 51 checks: wrong / fine / could not measure — the last is never counted either way.\n• Where every value came from.",
+      "page": "work"
+    },
+    {
+      "id": "note-leadcalls",
+      "x": 3200,
+      "y": 2880,
+      "w": 760,
+      "text": "CALLS & HISTORY tab.\n\n• Calls so far, with + Log a call. The form is not on the page until you press it.\n• Every task ever run on this business, with what it did and cost. Collapsed unless something is running.",
+      "page": "work"
+    },
+    {
+      "id": "note-leadcallslog",
+      "x": 4800,
+      "y": 2880,
+      "w": 760,
+      "text": "LOGGING A CALL — the panel after + Log a call: channel, result, objection, notes. Cancel closes it with nothing saved.",
+      "page": "work"
+    },
+    {
+      "id": "note-buydata",
+      "x": 0,
+      "y": 5380,
+      "w": 760,
+      "text": "BUY EXTRA DATA — the only screen where money is spent.\n\n• Each kind of data: what it gives, price each × how many = total, who bills it.\n• Already bought = free again. Things that cannot be looked up are skipped and counted.\n• The source you came for is ticked already.\n• Spending limit the run stops at. Warnings in plain words.",
+      "page": "work"
+    },
+    {
+      "id": "note-dashboard",
+      "x": 1600,
+      "y": 5700,
+      "w": 760,
+      "text": "DASHBOARD — how the whole list is doing.\n\n• Pipeline left to right, each a subset of the one before.\n• Next actions, each with one button.\n• Breakdowns are links into the leads list with that filter on.\n• What it has cost, by provider.",
+      "page": "work"
+    },
+    {
+      "id": "note-findbusinesses",
+      "x": 0,
+      "y": 980,
+      "w": 760,
+      "text": "FIND BUSINESSES — step 1 of a search.\n\n• Type of business, place, radius.\n• Nothing is spent here; the next screen shows the cost.",
+      "page": "add"
+    },
+    {
+      "id": "note-confirmsearch",
+      "x": 1600,
+      "y": 960,
+      "w": 760,
+      "text": "CHECK THE COST — step 2.\n\n• Cost range and number of Google searches, with who bills it.\n• Limits: how many businesses, maximum spend.\n• What runs afterwards (free).",
+      "page": "add"
+    },
+    {
+      "id": "note-searchrun",
+      "x": 3200,
+      "y": 1000,
+      "w": 760,
+      "text": "SEARCH IN PROGRESS — step 3.\n\n• Progress, found, excluded, spend so far, Stop.\n• Grid of search circles.\n• Failures shown with whether they cost anything.",
+      "page": "add"
+    },
+    {
+      "id": "note-importupload",
+      "x": 4800,
+      "y": 960,
+      "w": 760,
+      "text": "IMPORT — step 1.\n\n• Choose a CSV. Column names are matched loosely.\n• Nothing is added before the preview.",
+      "page": "add"
+    },
+    {
+      "id": "note-importpreview",
+      "x": 0,
+      "y": 2500,
+      "w": 760,
+      "text": "IMPORT — step 2, check before adding.\n\n• New / already in your list (merged, never duplicated) / possible duplicates / could not read, each with reasons.\n• What to do after: read & score, sort into categories (free), get Instagram (paid, priced next).",
+      "page": "add"
+    },
+    {
+      "id": "note-importedfiles",
+      "x": 1600,
+      "y": 2380,
+      "w": 760,
+      "text": "IMPORTED FILES — every list uploaded, with delete.",
+      "page": "add"
+    },
+    {
+      "id": "note-importdetail",
+      "x": 3200,
+      "y": 2420,
+      "w": 760,
+      "text": "ONE IMPORTED FILE — what it produced and what it was told to do, with a link to open those businesses in Leads.",
+      "page": "add"
+    },
+    {
+      "id": "note-addbyhand",
+      "x": 4800,
+      "y": 2380,
+      "w": 760,
+      "text": "ADD ONE BY HAND.\n\n• Name is required; website and phone make everything else possible.\n• Honest note: a name alone cannot find the Google listing yet.",
+      "page": "add"
+    },
+    {
+      "id": "note-instagram",
+      "x": 0,
+      "y": 1000,
+      "w": 760,
+      "text": "INSTAGRAM — the off-site view.\n\n• Who has an account, who has been looked up, followers, category, ads.\n• Price the ones not looked up in one step.\n• What Instagram will and will not tell anyone.",
+      "page": "setup"
+    },
+    {
+      "id": "note-icp",
+      "x": 1600,
+      "y": 1220,
+      "w": 760,
+      "text": "ICPs — who you actually want to sell to. This replaces Categories completely.\n\n• Each ICP: a name, an industry, the words it is searched by, and what a business must have to count as one.\n• Checked top down, first match wins.\n• Businesses no ICP describes are kept in one place, not deleted.\n• Nothing here costs anything.",
+      "page": "setup"
+    },
+    {
+      "id": "note-icpadd",
+      "x": 3200,
+      "y": 1740,
+      "w": 760,
+      "text": "ADDING AN ICP — in a panel, like every other form.\n\n• The words are the same ones Find businesses will search Google Maps with, so an ICP is written once and used for sourcing AND filtering.\n• Conditions: website, Instagram, followers, reviews, places.\n• Budget and revenue are shown but switched off, with the reason on hover.\n• Preview says how many businesses it would take, and how many would move.",
+      "page": "setup"
+    },
+    {
+      "id": "note-checklists",
+      "x": 4800,
+      "y": 1000,
+      "w": 760,
+      "text": "CHECKLISTS — your rules, and + Add a rule. No form on the page.",
+      "page": "setup"
+    },
+    {
+      "id": "note-checklistsadd",
+      "x": 0,
+      "y": 3160,
+      "w": 760,
+      "text": "CHECKLISTS — adding a rule, in a panel.\n\n• Which pages, which category, what to check, weight, and the sentence to say when it fails.\n• Preview on pages already read. Rules can be switched off.",
+      "page": "setup"
+    },
+    {
+      "id": "note-howitworks",
+      "x": 1600,
+      "y": 3800,
+      "w": 760,
+      "text": "HOW IT WORKS — every rule in plain words, as an accordion. Numbers on this page come from the same settings the product uses.",
+      "page": "setup"
+    },
+    {
+      "id": "note-dataspend",
+      "x": 3200,
+      "y": 3700,
+      "w": 760,
+      "text": "DATA & SPEND.\n\n• Totals, what is free, every paid source with price and who bills it.\n• The ledger of what was actually spent.\n• What cannot be bought at any price.",
+      "page": "setup"
+    },
+    {
+      "id": "note-login",
+      "x": 0,
+      "y": 960,
+      "w": 760,
+      "text": "SIGN IN — email and password, with a plain error.",
+      "page": "shared"
+    },
+    {
+      "id": "note-sharedpieces",
+      "x": 1600,
+      "y": 3460,
+      "w": 760,
+      "text": "SHARED PIECES — design these once, use everywhere: navigation (open / closed), background tasks (waiting, running, unknown size, done, stopped), messages, hover help, row colours, the three kinds of unknown, buttons, empty state.",
+      "page": "shared"
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "work"
+  }
+}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { estimateDiscoveryRequests } from "@lead-intel/core";
 import { PLACES_CENTER_LOOKUP_COST_CENTS, PLACES_TEXT_SEARCH_COST_CENTS } from "@lead-intel/shared";
+import { createClient } from "@/lib/supabase/server";
 import { createRun } from "./actions";
 
 function centsToDollars(cents: number): string {
@@ -17,6 +18,7 @@ export default async function ConfirmSearchPage({
 }: {
   searchParams: Promise<{
     niche?: string;
+    icp?: string;
     location?: string;
     radiusMiles?: string;
     maxBusinesses?: string;
@@ -25,9 +27,38 @@ export default async function ConfirmSearchPage({
   }>;
 }) {
   const params = await searchParams;
-  const niche = params.niche?.trim();
   const location = params.location?.trim();
   const radiusMiles = Number(params.radiusMiles);
+
+  /**
+   * An ICP is several searches, so the price is several searches.
+   *
+   * Read here rather than carried in the query string: the words are the operator's and can be
+   * edited between pressing the button and confirming, and quoting a price for words that have
+   * since changed would be quoting for a search that is not the one about to run.
+   */
+  const supabase = await createClient();
+  const { data: icp } = params.icp
+    ? await supabase.from("icps").select("id, name, search_terms").eq("id", params.icp).maybeSingle()
+    : { data: null };
+  const icpTerms = ((icp?.search_terms ?? []) as string[]).filter((t) => t.trim().length > 0);
+  const niche = icp ? icpTerms.join(", ") : params.niche?.trim();
+  const searches = icp ? icpTerms.length : 1;
+
+  if (icp && icpTerms.length === 0) {
+    return (
+      <main style={{ padding: 24, maxWidth: 640, margin: "0 auto" }}>
+        <p>
+          <Link href="/search">&larr; Start over</Link>
+        </p>
+        <p style={{ color: "var(--warn-ink)" }}>
+          <strong>{icp.name}</strong> has no words to search Google Maps with yet, so there is
+          nothing to run. <Link href={`/icps?edit=${icp.id}`}>Add some words to it</Link> — an ICP
+          with none is only ever matched against businesses already in your list.
+        </p>
+      </main>
+    );
+  }
 
   if (!niche || !location || !Number.isFinite(radiusMiles) || radiusMiles <= 0) {
     return (
@@ -44,7 +75,15 @@ export default async function ConfirmSearchPage({
   // lands, cannot be known without running the search (pre-build-risks-and-api-limits.md §4).
   // See packages/core/src/discovery/estimate.ts for why the ceiling is shown separately rather
   // than folded into the range.
-  const estimate = estimateDiscoveryRequests({ radiusMiles });
+  const one = estimateDiscoveryRequests({ radiusMiles });
+  // Every word is a full run of its own — its own grid, its own centre lookup — so the whole thing
+  // costs what one costs, times the number of words.
+  const estimate = {
+    initialCells: one.initialCells * searches,
+    minRequests: one.minRequests * searches,
+    maxRequestsWithoutSubdivision: one.maxRequestsWithoutSubdivision * searches,
+    ceilingRequests: one.ceilingRequests * searches,
+  };
   const hasSpendLimit = Boolean(params.maxSpendDollars);
 
   return (
@@ -76,8 +115,19 @@ export default async function ConfirmSearchPage({
 
       <div style={{ background: "var(--surface)", border: "1px solid var(--rule)", borderRadius: 3, padding: 24, marginBottom: 20 }}>
         <dl style={{ margin: 0, display: "grid", gridTemplateColumns: "auto 1fr", rowGap: 10, columnGap: 16, fontSize: 16 }}>
-          <dt style={{ color: "var(--ink-3)" }}>Niche</dt>
-          <dd style={{ margin: 0 }}>{niche}</dd>
+          <dt style={{ color: "var(--ink-3)" }}>{icp ? "ICP" : "Niche"}</dt>
+          <dd style={{ margin: 0 }}>
+            {icp ? (
+              <>
+                <strong>{icp.name}</strong>
+                <div style={{ fontSize: 15, color: "var(--ink-3)" }}>
+                  {searches} searches, one for each word: {icpTerms.join(", ")}
+                </div>
+              </>
+            ) : (
+              niche
+            )}
+          </dd>
           <dt style={{ color: "var(--ink-3)" }}>Location</dt>
           <dd style={{ margin: 0 }}>{location}</dd>
           <dt style={{ color: "var(--ink-3)" }}>Radius</dt>
@@ -135,7 +185,11 @@ export default async function ConfirmSearchPage({
       </div>
 
       <form action={createRun} style={{ background: "var(--surface)", border: "1px solid var(--rule)", borderRadius: 3, padding: 24 }}>
-        <input type="hidden" name="niche" value={niche} />
+        {icp ? (
+          <input type="hidden" name="icp" value={icp.id} />
+        ) : (
+          <input type="hidden" name="niche" value={niche} />
+        )}
         <input type="hidden" name="location" value={location} />
         <input type="hidden" name="radiusMiles" value={String(radiusMiles)} />
         {params.maxBusinesses && <input type="hidden" name="maxBusinesses" value={params.maxBusinesses} />}
@@ -150,7 +204,7 @@ export default async function ConfirmSearchPage({
           A run that hits either limit stops cleanly and keeps everything already found (spec §10.3).
         </p>
         <button className="btn" type="submit">
-          Start discovery
+          {searches > 1 ? `Start all ${searches} searches` : "Start discovery"}
         </button>
       </form>
     </main>

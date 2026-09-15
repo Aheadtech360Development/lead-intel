@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 /**
  * Logs what happened after outreach (spec §12 Phase 6).
@@ -51,4 +52,5 @@ export async function logOutcome(businessId: string, formData: FormData): Promis
   if (error) throw new Error(`Could not log the outcome: ${error.message}`);
 
   revalidatePath(`/records/${businessId}`);
+  redirect(`/records/${businessId}?tab=calls&saved=${encodeURIComponent("Call saved.")}`);
 }

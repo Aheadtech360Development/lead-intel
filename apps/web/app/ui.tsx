@@ -36,7 +36,7 @@ export type NavKey =
   | "instagram"
   | "search"
   | "import"
-  | "categories"
+  | "icps"
   | "checklists"
   | "rules"
   | "spend";
@@ -99,11 +99,11 @@ export const NAV: { key: NavKey; href: string; icon: string; label: string; what
     group: "Add businesses",
   },
   {
-    key: "categories",
-    href: "/categories",
-    icon: "🏷️",
-    label: "Categories",
-    what: "Your own rules for sorting businesses into categories.",
+    key: "icps",
+    href: "/icps",
+    icon: "🎯",
+    label: "ICPs",
+    what: "Who you want to sell to: the words each kind of customer is found and recognised by.",
     group: "Set up",
   },
   {
@@ -429,6 +429,116 @@ export function Banner({ tone, children }: { tone: Tone; children: React.ReactNo
 }
 
 /** A short note inside a panel, styled as guidance rather than as another row of data. */
+/**
+ * The whole product, as four stages.
+ *
+ * The operator asked for the system to be simple enough to understand at a glance, and described it
+ * in exactly these four words: sourcing, filtering, analysis, enrichment. Every screen belongs to
+ * one of them, so the strip marks the one you are on and says in a line what each costs — the two
+ * that can cost money say so, the two that never do say that too.
+ *
+ * Links, so the strip is also a way to move between them.
+ */
+export type Stage = "sourcing" | "filtering" | "analysis" | "enrichment";
+
+const STAGES: { id: Stage; n: number; name: string; what: string; how: string; cost: string; href: string }[] = [
+  {
+    id: "sourcing",
+    n: 1,
+    name: "Sourcing",
+    what: "Getting businesses in",
+    how: "Search Google Maps for an ICP, import a file, or add one by hand",
+    cost: "A search can cost — the price is shown first",
+    href: "/search",
+  },
+  {
+    id: "filtering",
+    n: 2,
+    name: "Filtering",
+    what: "Narrowing to who you want",
+    how: "Your ICPs, then the filters on the leads list",
+    cost: "Free",
+    href: "/icps",
+  },
+  {
+    id: "analysis",
+    n: 3,
+    name: "Analysis",
+    what: "Judging what is wrong",
+    how: "Their website against your checklists, plus reviews and speed",
+    cost: "Free, except reading pages in a browser",
+    href: "/checklists",
+  },
+  {
+    id: "enrichment",
+    n: 4,
+    name: "Enrichment",
+    what: "Buying what is missing",
+    how: "Google listing, Instagram, ads — only for businesses you pick",
+    cost: "Costs money, always confirmed first",
+    href: "/spend",
+  },
+];
+
+export function StageStrip({ current }: { current?: Stage }) {
+  return (
+    <nav
+      aria-label="The four stages"
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+        gap: 10,
+        marginBottom: 18,
+      }}
+    >
+      {STAGES.map((stage) => {
+        const on = stage.id === current;
+        return (
+          <Link
+            key={stage.id}
+            href={stage.href}
+            aria-current={on ? "step" : undefined}
+            style={{
+              display: "grid",
+              gap: 3,
+              padding: "11px 13px",
+              borderRadius: 10,
+              border: on ? "2px solid var(--ink)" : "1.5px solid var(--rule)",
+              background: on ? "var(--surface-2)" : "var(--surface)",
+              color: "var(--ink)",
+              textDecoration: "none",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  width: 22,
+                  height: 22,
+                  borderRadius: 6,
+                  background: "var(--ink)",
+                  color: "var(--paper)",
+                  fontSize: 13,
+                  fontWeight: 800,
+                }}
+              >
+                {stage.n}
+              </span>
+              <span style={{ fontSize: 16.5, fontWeight: 700 }}>{stage.name}</span>
+              {on && <span style={{ fontSize: 13, color: "var(--ink-2)", marginLeft: "auto" }}>you are here</span>}
+            </span>
+            <span style={{ fontSize: 14, fontWeight: 650 }}>{stage.what}</span>
+            <span style={{ fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.4 }}>{stage.how}</span>
+            <span style={{ fontSize: 13.5, color: "var(--ink-3)", marginTop: 2 }}>{stage.cost}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export function Note({ children, tone = "plain" }: { children: React.ReactNode; tone?: "plain" | "warn" }) {
   const c = toneVars(tone === "warn" ? "warn" : "plain");
   return (

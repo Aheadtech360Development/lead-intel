@@ -21,6 +21,7 @@ import {
   Panel,
   ROUTE_LABELS,
   TIER_MEANING,
+  StageStrip,
 } from "../ui";
 
 /**
@@ -51,6 +52,7 @@ export default async function RulesPage() {
       title="How it works"
       what="Every rule in the product, in plain words. What runs, where it runs, what it costs, and — just as important — what it cannot tell you at any price."
     >
+      <StageStrip />
       <InfoBox title="The one sentence version" tone="brand">
         The product finds local businesses, reads their websites, counts what is wrong, and sorts them so the
         best phone call is the first row. Everything below is a detail of that sentence.
@@ -237,13 +239,14 @@ export default async function RulesPage() {
         tone="social"
       >
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--rule)" }}>
-          <strong style={{ fontSize: 16.5 }}>Categories</strong>
-          <span style={{ fontSize: 14.5, color: "var(--ink-2)" }}> — the Categories screen</span>
+          <strong style={{ fontSize: 16.5 }}>ICPs</strong>
+          <span style={{ fontSize: 14.5, color: "var(--ink-2)" }}> — the ICPs screen</span>
           <p style={{ fontSize: 15.5, color: "var(--ink-2)", lineHeight: 1.65, margin: "6px 0 0", maxWidth: 880 }}>
-            A rule looks for words in what has already been collected — the business name, what Google files them
-            under, and the text of their own website — and files matching businesses under a category you name.
-            It runs over stored text, so it is <strong>free and instant</strong>, and re-running it never costs
-            anything. A business that matches no rule stays uncategorised rather than being guessed at.
+            An ICP is your own description of a customer you want. Find businesses searches Google Maps with its
+            words, and every business in the list is matched against it — by words in their name, their website
+            and their Instagram, and by conditions such as reviews, a working website or where they are. Matching
+            reads what is already stored, so it is <strong>free and instant</strong>, and re-running it never costs
+            anything. A business that matches no ICP stays in no ICP rather than being guessed at.
           </p>
         </div>
         <div style={{ padding: "14px 18px" }}>
@@ -455,7 +458,7 @@ const AI_USES: { where: string; cost: string; what: string }[] = [
       "After a page has been measured, the model is shown the measurements and asked what they miss — whether the wording works, whether the order is right, whether a stranger would understand what the page wants from them. It is forbidden from repeating a check you can already see for yourself.",
   },
   {
-    where: "Writing a category rule from a description",
+    where: "Writing an ICP from a description",
     cost: "about 0.1¢ each",
     what:
       "You describe what you are after in ordinary words and it suggests the words to match on. It is a suggestion only — nothing is saved until you have looked at it and pressed save.",

@@ -542,19 +542,25 @@ textarea {
   z-index: 1000;
   width: max-content;
   max-width: 300px;
-  padding: 10px 13px;
+  /* A light card rather than a black slab: the operator could not read white text on near-black
+     at this size, and a message about a button should look like part of the page, not an alarm.
+     The blue edge says "this explains something"; a switched-off button turns it amber. */
+  padding: 12px 15px 12px 14px;
   border-radius: 10px;
-  background: #0a1020;
-  border: 1px solid #2c3650;
-  color: #ffffff;
-  font-size: 14.5px;
+  background: #ffffff;
+  border: 1.5px solid var(--rule);
+  border-left: 5px solid var(--brand);
+  color: var(--ink);
+  font-size: 15px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.55;
   letter-spacing: 0;
   text-transform: none;
   text-align: left;
   white-space: normal;
-  box-shadow: 0 12px 28px -8px rgba(10, 16, 32, 0.55);
+  box-shadow:
+    0 16px 36px -12px rgba(16, 20, 28, 0.35),
+    0 2px 6px rgba(16, 20, 28, 0.08);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
@@ -935,7 +941,26 @@ textarea {
    button that looks pressable while doing nothing is the confusing kind of wrong. */
 .btn:disabled,
 .btn[disabled] {
-  opacity: 0.42;
+  /* Colours, not opacity. Opacity is inherited by the hover message drawn from the button, so a
+     faded button had a faded explanation — the one moment the explanation matters most. */
+  background: var(--surface-2);
+  border: 1.5px dashed var(--rule-2);
+  color: var(--ink-3);
   cursor: not-allowed;
-  filter: grayscale(0.4);
+}
+
+.btn:disabled:hover,
+.btn[disabled]:hover {
+  background: var(--surface-2);
+  border-color: var(--rule-2);
+}
+
+/* A switched-off button's message is a reason, not a description: amber edge instead of blue. */
+[data-tip]:disabled::after {
+  border-left-color: var(--warn);
+}
+
+/* Filters that exist but are switched off (Budget, Revenue) explain a reason too. */
+.fmenu-off[data-tip]::after {
+  border-left-color: var(--warn);
 }

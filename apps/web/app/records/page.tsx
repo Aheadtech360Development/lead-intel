@@ -642,6 +642,20 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
           * running ads" narrows that set instead of quietly discarding it.
           */}
         <form id="lead-search" method="get" action="/records" />
+
+        {/*
+          The ticks have a form of their own.
+
+          They used to belong to the table's form, which also holds a Claim button per row — and
+          each of those carries hidden fields of its own. Opening step 3 submitted the lot as a GET,
+          so the address grew past ten thousand characters with fifty rows on screen, close to the
+          size a request is refused at. This form holds nothing but the filters and the ticks, so
+          the address carries exactly those.
+        */}
+        <form id="lead-pick" method="get" action="/records" />
+        {Object.entries(current).map(([key, value]) => (
+          <input key={`pick-${key}`} type="hidden" form="lead-pick" name={key} value={String(value)} />
+        ))}
         {Object.entries(current)
           .filter(([key]) => key !== "q")
           .map(([key, value]) => (
@@ -1053,17 +1067,6 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                 {Object.entries(current).map(([key, value]) => (
                   <input key={key} type="hidden" name={`f_${key}`} value={value} />
                 ))}
-                {/*
-                  The same filters again, under their own names.
-
-                  Opening step 3 is a GET submit of this form, and a GET submit builds the URL out
-                  of the form's fields alone. Without these the panel would open on an unfiltered
-                  list: the `f_` copies above are what the server actions read, and the page itself
-                  reads the plain names.
-                */}
-                {Object.entries(current).map(([key, value]) => (
-                  <input key={`plain-${key}`} type="hidden" name={key} value={value} />
-                ))}
 
                 <div
                   style={{
@@ -1209,6 +1212,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                             <input
                               type="checkbox"
                               name="id"
+                              form="lead-pick"
                               value={b.id}
                               // Ticked by the "select all" link in the header, which reloads with
                               // `all=1` rather than running a script. See the Filters type — and
@@ -1381,15 +1385,14 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               </form>
 
               {/*
-                Step 3 sits outside the table's form on purpose, and reaches back into it with the
-                `form` attribute.
+                Step 3 sits outside the table's form on purpose.
 
                 Inside the form it could never follow the operator down the page: the form scrolls
                 sideways, and a sticky element is only sticky within the box that scrolls. Out here
-                it sticks to the bottom of the screen for the whole length of the list — and its
-                buttons still submit the ticks, because `form="lead-table"` names the form they
-                belong to wherever they sit. It also lets the whole-list jobs below be forms of their
-                own, which a form inside a form could not be.
+                it sticks to the bottom of the screen for the whole length of the list. Its button
+                submits the ticks' own form (`lead-pick`), and every action in the panel is a small
+                form of its own that already holds the ticked ids — so nothing here depends on which
+                form a button happens to sit inside.
               */}
                 {/* Step 3 rides inside the table's own form, because the ticks do. Opening it is
                     a GET submit: the browser puts every ticked id in the query string, the page
@@ -1411,9 +1414,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                     <button
                       className="btn tip-right"
                       type="submit"
-                      form="lead-table"
-                      formMethod="get"
-                      formAction="/records"
+                      form="lead-pick"
                       name="act"
                       value="1"
                       data-tip="Opens one panel with everything you can do to these businesses, each with what it costs and who bills it. Nothing starts until you press a button inside it."
@@ -1493,16 +1494,19 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                           ) : undefined
                         }
                       >
-                        <button
+                        <form action={analyseUnscored} style={{ display: "contents" }}>
+                          {tickedIds.map((tid) => (<input key={tid} type="hidden" name="id" value={tid} />))}
+                          <button
                           type="submit"
-                          form="lead-table"
-                          formAction={analyseUnscored}
+                          
+                          
                           className="btn"
                           disabled={tickedIds.length === 0}
-                          data-tip="Runs the whole analysis on the businesses you ticked, in one go."
+                          data-tip={tickedIds.length === 0 ? "Switched off because nothing is ticked. Close this panel, tick businesses in step 2, then press Choose what to do again." : "Reads the ticked businesses' websites, runs the 51 checks and scores them again. Free."}
                         >
                           Run on {tickedIds.length > 0 ? `these ${tickedIds.length}` : "the ticked"}
                         </button>
+                        </form>
                       </ActionRow>
 
                       <ActionRow
@@ -1519,16 +1523,19 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                           ) : undefined
                         }
                       >
-                        <button
+                        <form action={auditTickedWebsites} style={{ display: "contents" }}>
+                          {tickedIds.map((tid) => (<input key={tid} type="hidden" name="id" value={tid} />))}
+                          <button
                           type="submit"
-                          form="lead-table"
-                          formAction={auditTickedWebsites}
+                          
+                          
                           className="btn-2 btn"
                           disabled={tickedIds.length === 0}
-                          data-tip="Opens the ticked businesses' websites in a real browser and writes what is wrong with each page."
+                          data-tip={tickedIds.length === 0 ? "Switched off because nothing is ticked. Close this panel, tick businesses in step 2, then press Choose what to do again." : "Opens the ticked businesses' websites in a real browser and writes what is wrong with each page. 0.36¢ a site, billed by Google AI Studio (Gemini)."}
                         >
                           Read {tickedIds.length > 0 ? `these ${tickedIds.length}` : "the ticked"}
                         </button>
+                        </form>
                       </ActionRow>
 
                       <ActionRow
@@ -1545,25 +1552,31 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                           ) : undefined
                         }
                       >
-                        <button
+                        <form action={getPaidDataForTicked} style={{ display: "contents" }}>
+                          {tickedIds.map((tid) => (<input key={tid} type="hidden" name="id" value={tid} />))}{Object.entries(current).map(([key, value]) => (<input key={key} type="hidden" name={`f_${key}`} value={String(value)} />))}
+                          <button
                           type="submit"
-                          form="lead-table"
+                          
                           className="btn"
                           disabled={tickedIds.length === 0}
-                          data-tip="Opens the confirm screen with the rows you ticked. Nothing is bought until you confirm there."
+                          data-tip={tickedIds.length === 0 ? "Switched off because nothing is ticked. Close this panel, tick businesses in step 2, then press Choose what to do again." : "Opens the confirm screen with the rows you ticked. Nothing is bought until you confirm there."}
                         >
                           For the {tickedIds.length > 0 ? tickedIds.length : "ticked"}
                         </button>
+                        </form>
                         {view !== "unanalysed" && (
-                          <button
+                          <form action={getPaidDataForFiltered} style={{ display: "contents" }}>
+                            {Object.entries(current).map(([key, value]) => (<input key={key} type="hidden" name={`f_${key}`} value={String(value)} />))}
+                            <button
                             type="submit"
-                            form="lead-table"
-                          formAction={getPaidDataForFiltered}
+                            
+                          
                             className="btn-2 btn"
                             data-tip="Opens the confirm screen with every business your filters are showing, ticked or not."
                           >
                             For all {shown.length} shown
                           </button>
+                          </form>
                         )}
                       </ActionRow>
 

@@ -1,8 +1,12 @@
 import { ENRICHMENT_DEFINITIONS, ENRICHMENT_ORDER } from "@lead-intel/shared";
 import Link from "next/link";
+import { CHECK_DEFINITIONS } from "@lead-intel/core";
 import { createClient } from "@/lib/supabase/server";
+import { budgetFor, canAfford, money as budgetMoney, PERIOD_WORDS } from "@/lib/budget";
+import { getViewer, leadScope } from "@/lib/viewer";
 import { signOut } from "../actions";
-import { AppShell, Badge, InfoBox, Money, Note, Panel, SectionHeading, StatCard, TD, Th, StageStrip } from "../ui";
+import { AppShell, Badge, InfoBox, Meter, Money, Note, PANEL, Panel, SectionHeading, StatCard, TD, Th, StageStrip } from "../ui";
+import { TeamBudgets } from "./team-budgets";
 
 /**
  * What every kind of data costs, what is free, and what has actually been spent.
@@ -20,7 +24,7 @@ const FREE_SOURCES: { name: string; what: string; icon: string }[] = [
   {
     icon: "🕷️",
     name: "Reading their website",
-    what: "Up to four pages each — homepage, contact, socials, about. Produces most of the 51 checks, plus their email, a phone number and sometimes the owner's name.",
+    what: `Up to four pages each — homepage, contact, socials, about. Produces most of the ${CHECK_DEFINITIONS.length} checks, plus their email, a phone number and sometimes the owner's name.`,
   },
   {
     icon: "⚡",
@@ -51,13 +55,32 @@ const FREE_SOURCES: { name: string; what: string; icon: string }[] = [
 
 export default async function SpendPage() {
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const claims = claimsData?.claims;
+  const viewer = await getViewer();
 
-  const [{ data: calls }, { data: businessRows }] = await Promise.all([
-    supabase.from("provider_calls").select("endpoint, cost_cents, status, called_at").limit(20000),
-    supabase.from("businesses").select("id").eq("status", "active"),
+  /**
+   * A member sees what *they* have spent, and nothing about anyone else.
+   *
+   * The ledger has no owner column — the worker writes it, and the worker has no user session. A
+   * member's spend therefore comes from their own tasks, which do know who started them, and the
+   * screen says so in those words. The administrator's figure is the ledger itself.
+   */
+  const mine = viewer && !viewer.isAdmin ? viewer.id : null;
+  const scope = viewer ? leadScope(viewer) : null;
+  const budget = viewer ? await budgetFor(viewer) : null;
+
+  const callQuery = supabase.from("provider_calls").select("endpoint, cost_cents, status, called_at").limit(20000);
+  let businessQuery = supabase.from("businesses").select("id").eq("status", "active");
+  if (scope) businessQuery = businessQuery.eq(scope.column, scope.value);
+  const myJobsQuery = mine
+    ? supabase.from("job_runs").select("kind, label, cost_cents, started_at, status").eq("created_by", mine).order("started_at", { ascending: false }).limit(200)
+    : null;
+
+  const [{ data: calls }, { data: businessRows }, myJobs] = await Promise.all([
+    callQuery,
+    businessQuery,
+    myJobsQuery ?? Promise.resolve({ data: [] as { kind: string; label: string; cost_cents: string; started_at: string; status: string }[] }),
   ]);
+  const myRuns = (myJobs as { data: { kind: string; label: string; cost_cents: string; started_at: string; status: string }[] }).data ?? [];
 
   const spentCents = (calls ?? []).reduce((sum, c) => sum + Number(c.cost_cents ?? 0), 0);
   const businesses = (businessRows ?? []).length;
@@ -75,40 +98,141 @@ export default async function SpendPage() {
   return (
     <AppShell
       current="spend"
-      email={typeof claims?.email === "string" ? claims.email : null}
+      spentCents={spentCents}
+      email={viewer?.email ?? null}
       signOutAction={signOut}
-      title="Data & spend"
+      title={viewer?.isAdmin ? "Data & spend" : "My spend"}
       what={
-        <>
-          Every kind of data this system can get, whether it costs anything, and what you have spent
-          so far. <strong>Most of it is free</strong> — the paid parts are only ever bought for
-          businesses you tick yourself.
-        </>
+        viewer?.isAdmin ? (
+          <>
+            Every kind of data this system can get, whether it costs anything, and what has been spent so far.{" "}
+            <strong>Most of it is free</strong> — the paid parts are only ever bought for businesses someone ticks.
+          </>
+        ) : (
+          <>
+            What <strong>you</strong> have spent, what it was for and who billed it. Company totals and other
+            people&rsquo;s spend are not shown here and are not available to you. <strong>Most of this product is
+            free</strong> — the paid parts are only ever bought for businesses you tick yourself.
+          </>
+        )
       }
     >
       <StageStrip current="enrichment" />
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
-        <StatCard
-          icon="💳"
-          tone="money"
-          value={<Money cents={spentCents} free="nothing yet" />}
-          label="Total spent with every provider, all time"
-          explain="Counted from the ledger, which is written before each paid call rather than after. It cannot flatter itself."
-        />
-        <StatCard
-          icon="🧾"
-          value={(calls ?? []).length}
-          label="Paid calls made"
-          explain="One call is one business and one kind of data. A repeat of the same purchase is not charged again."
-        />
-        <StatCard
-          icon="🏢"
-          value={businesses > 0 ? <Money cents={spentCents / businesses} free="nothing yet" /> : "—"}
-          label="Average cost of one business"
-          explain={`Total spend divided across all ${businesses} businesses, including the ones nothing was bought for.`}
-        />
-        <StatCard icon="🎁" tone="good" value={FREE_SOURCES.length} label="Things that cost nothing" explain="Listed below. This is the bulk of the system." />
-      </div>
+
+      {budget ? (
+        <>
+          {/* A member's own money, and the limit on it. The company's total is not on this page. */}
+          <div className="card" style={{ padding: "16px 18px", marginBottom: 14, display: "grid", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+              <h2 style={{ fontSize: 17, margin: 0 }}>Your allowance</h2>
+              {budget.unset ? (
+                <Badge tone="warn">Nobody has set one yet</Badge>
+              ) : (
+                <Badge tone="plain">Resets {PERIOD_WORDS[budget.period]}</Badge>
+              )}
+            </div>
+
+            {budget.unset ? (
+              <p style={{ margin: 0, fontSize: 14.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+                Paid data cannot be bought from this account until the administrator sets you an amount. Everything
+                free still works — reading websites, the {CHECK_DEFINITIONS.length} checks, scoring, ICPs, importing,
+                logging calls and exporting.
+              </p>
+            ) : (
+              <>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5 }}>
+                  <span>
+                    Spent since {budget.windowStart.toLocaleDateString("en-GB", { day: "numeric", month: "long" })}
+                  </span>
+                  <strong className="mono">{budgetMoney(budget.spentCents)}</strong>
+                </div>
+                <Meter
+                  value={budget.amountCents > 0 ? Math.min(100, (budget.spentCents / budget.amountCents) * 100) : 0}
+                  tone="problem"
+                  height={10}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14.5 }}>
+                  <span>Left of {budgetMoney(budget.amountCents)}</span>
+                  <strong className="mono" style={{ color: budget.leftCents > 0 ? "var(--good-ink)" : "var(--bad-ink)" }}>
+                    {budgetMoney(budget.leftCents)}
+                  </strong>
+                </div>
+                {budget.note ? (
+                  <p style={{ margin: 0, fontSize: 13.5, color: "var(--ink-2)" }}>{budget.note}</p>
+                ) : null}
+              </>
+            )}
+
+            <p style={{ margin: 0, fontSize: 13.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+              A purchase that would go past this is refused <strong>before</strong> anything is bought — you are told
+              what it costs and what you have left, and nothing is charged. Counted from what your own tasks cost; the
+              ledger behind every figure is written before each call is made.
+            </p>
+          </div>
+
+          <SectionHeading
+            title="What your tasks have cost"
+            hint="Every task you have started that spent anything, newest first."
+          />
+          <div style={{ ...PANEL, marginBottom: 18 }}>
+            {myRuns.filter((r) => Number(r.cost_cents ?? 0) > 0).length === 0 ? (
+              <p style={{ margin: 0, padding: "16px 18px", fontSize: 14.5, color: "var(--ink-2)" }}>
+                You have not spent anything yet. Nothing in this product charges without asking first.
+              </p>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14.5 }}>
+                <thead>
+                  <tr>
+                    <Th label="Task" />
+                    <Th label="When" width={140} />
+                    <Th label="Cost" width={110} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {myRuns
+                    .filter((r) => Number(r.cost_cents ?? 0) > 0)
+                    .map((r, i) => (
+                      <tr key={`${r.started_at}-${i}`}>
+                        <td style={TD}>{r.label}</td>
+                        <td style={{ ...TD, color: "var(--ink-2)" }}>
+                          {new Date(r.started_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                        </td>
+                        <td style={{ ...TD, fontVariantNumeric: "tabular-nums" }}>
+                          <Money cents={Number(r.cost_cents ?? 0)} free="nothing" />
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      ) : (
+        <div style={{ display: "flex", gap: 14, flexWrap: "wrap", marginBottom: 6 }}>
+          <StatCard
+            icon="💳"
+            tone="money"
+            value={<Money cents={spentCents} free="nothing yet" />}
+            label="Total spent with every provider, all time"
+            explain="Counted from the ledger, which is written before each paid call rather than after. It cannot flatter itself."
+          />
+          <StatCard
+            icon="🧾"
+            value={(calls ?? []).length}
+            label="Paid calls made"
+            explain="One call is one business and one kind of data. A repeat of the same purchase is not charged again."
+          />
+          <StatCard
+            icon="🏢"
+            value={businesses > 0 ? <Money cents={spentCents / businesses} free="nothing yet" /> : "—"}
+            label="Average cost of one business"
+            explain={`Total spend divided across all ${businesses} businesses, including the ones nothing was bought for.`}
+          />
+          <StatCard icon="🎁" tone="good" value={FREE_SOURCES.length} label="Things that cost nothing" explain="Listed below. This is the bulk of the system." />
+        </div>
+      )}
+
+      {viewer?.isAdmin ? <TeamBudgets /> : null}
 
       <SectionHeading title="Free — no key, no account, no limit" hint="This runs on every business automatically. You never have to choose it." />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 14, marginBottom: 8 }}>

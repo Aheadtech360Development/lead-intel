@@ -2,6 +2,8 @@ import Link from "next/link";
 import { estimateDiscoveryRequests } from "@lead-intel/core";
 import { PLACES_CENTER_LOOKUP_COST_CENTS, PLACES_TEXT_SEARCH_COST_CENTS } from "@lead-intel/shared";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
+import { AdminOnlyNotice, AppShell } from "../../ui";
 import { createRun } from "./actions";
 
 function centsToDollars(cents: number): string {
@@ -26,6 +28,15 @@ export default async function ConfirmSearchPage({
     error?: string;
   }>;
 }) {
+  const viewer = await getViewer();
+  if (viewer && !viewer.isAdmin) {
+    return (
+      <AppShell current="leads" email={viewer.email} title="Find businesses" autoRefresh={false}>
+        <AdminOnlyNotice thing="Searching Google Maps" why={"A Maps search creates businesses nobody has seen yet, and it costs money for every search and every listing it brings back. The administrator runs it and hands out what it finds. Importing a spreadsheet and adding a business by hand are both yours, and both free."} />
+      </AppShell>
+    );
+  }
+
   const params = await searchParams;
   const location = params.location?.trim();
   const radiusMiles = Number(params.radiusMiles);

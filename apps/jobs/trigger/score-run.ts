@@ -1,8 +1,8 @@
 import { businesses, createDbClient, findings } from "@lead-intel/db";
 import { logger, task } from "@trigger.dev/sdk";
 import { jobProgress } from "../src/job-progress.js";
-import { and, eq, exists, sql } from "drizzle-orm";
-import { scoreAndStore } from "../src/scoring.js";
+import { and, eq, exists, inArray, sql } from "drizzle-orm";
+import { scoreManyAndStore } from "../src/scoring.js";
 
 /**
  * Rescores every analysed business from the findings already stored — no crawling, no cost.
@@ -20,17 +20,35 @@ import { scoreAndStore } from "../src/scoring.js";
 export const scoreRunTask = task({
   id: "score-run",
   maxDuration: 900,
-  run: async (payload: { runId?: string; limit?: number; jobRunId?: string | null }) => {
+  run: async (payload: {
+    runId?: string;
+    limit?: number;
+    jobRunId?: string | null;
+    /**
+     * Score **these** businesses rather than the whole list.
+     *
+     * Added because "analyse this one business" was costing a whole-list re-score: the operator's
+     * single crawl finished in seconds and then sat for fourteen minutes while 422 records that
+     * had not changed were scored again. Scoring is free, so the old behaviour was defensible on
+     * cost and indefensible on time.
+     */
+    businessIds?: string[];
+  }) => {
     const db = createDbClient();
     const progress = jobProgress(db, payload.jobRunId);
 
     try {
+
+      const named = (payload.businessIds ?? []).filter((id) => id.length > 0);
 
       const analysed = exists(
         db.select({ one: sql`1` }).from(findings).where(eq(findings.businessId, businesses.id)),
       );
       const conditions = [eq(businesses.status, "active"), analysed];
       if (payload.runId) conditions.push(eq(businesses.discoveredInRun, payload.runId));
+      // Still filtered by "has findings": a named business nobody has analysed has nothing to
+      // score, and scoring it would write "nothing is wrong with them" from an empty table.
+      if (named.length > 0) conditions.push(inArray(businesses.id, named));
 
       const rows = await db
         .select({ id: businesses.id, name: businesses.displayName })
@@ -41,25 +59,37 @@ export const scoreRunTask = task({
       logger.info("rescoring", { count: rows.length });
       await progress.start(rows.length, `Re-scoring ${rows.length} businesses`);
 
+      /**
+       * One bulk pass rather than a loop of single scores.
+       *
+       * The loop this replaced issued five round trips per business. On 422 records against a
+       * database in another region that measured 13.9 minutes of waiting to do a few seconds of
+       * arithmetic — the single largest reason the operator reported that "task poora din leta
+       * hai". Same scoring, same results; the fetching is done a chunk at a time.
+       */
+      const { scored: results } = await scoreManyAndStore(
+        db,
+        rows.map((row) => row.id),
+        {
+          // Progress per chunk rather than per business: a write purely to move a bar would cost
+          // more than the work it reports on.
+          onProgress: (done) => progress.setDone(done, `Scored ${done} of ${rows.length}`),
+          stopped: () => progress.stopped(),
+        },
+      );
+
       const tiers = new Map<string, number>();
-      let scored = 0;
       let unscorable = 0;
       let passedGate = 0;
 
-      for (const row of rows) {
-        const score = await scoreAndStore(db, row.id);
-        scored += 1;
+      for (const score of results) {
         if (score.problemScore === null) unscorable += 1;
         if (score.passedGate) passedGate += 1;
         const key = score.tier === null ? "unscorable" : `tier ${score.tier}`;
         tiers.set(key, (tiers.get(key) ?? 0) + 1);
-
-        // Every twenty rather than every one. Scoring a business is arithmetic and takes
-        // milliseconds; a database write per business purely to move a bar would cost more than the
-        // work it is reporting on. `setDone` rather than `say`, because `say` leaves the count at
-        // zero and draws a bar frozen at 0% under a line of text that is visibly moving.
-        if (scored % 20 === 0) await progress.setDone(scored, `Scored ${scored} of ${rows.length}`);
       }
+
+      const scored = results.length;
 
       const summary = { scored, unscorable, passedGate, tiers: Object.fromEntries(tiers) };
       logger.info("rescored", summary);

@@ -27,7 +27,7 @@ import { createClient } from "@/lib/supabase/server";
  * stronger guarantee than leaving it unticked, because there is nothing to tick by accident.
  */
 export interface ImportPlan {
-  /** Crawl their websites and run the 51 checks. Free. */
+  /** Crawl their websites and run the 64 checks. Free. */
   analyseWebsites: boolean;
   /** Sort them with the category rules once the crawl has something to read. Free. */
   applyCategories: boolean;

@@ -24,8 +24,21 @@ const RENDER_USER_AGENT =
  * and machine time is what Trigger.dev bills, by the second.
  */
 
-/** Long enough for a slow site on a slow connection; short enough that one bad page cannot stall a run. */
-const NAVIGATION_TIMEOUT_MS = 20_000;
+/**
+ * Long enough for a slow site on a slow connection; short enough that one bad page cannot stall a
+ * run.
+ *
+ * **Twenty seconds was too short, and it was failing real sites silently.** Measured on
+ * ninjatransfers.com — a working, busy business whose home page is 1.9 MB of Shopify — a cold
+ * render took **13.9 seconds** and a second one went past twenty. The operator saw the result as
+ * "The home page could not be read (timeout)", which reads as a verdict about the business and was
+ * nothing of the kind.
+ *
+ * Thirty-five seconds costs nothing on a healthy site, because navigation ends when the document
+ * does. It only spends the extra on the sites that need it, which are exactly the ones worth
+ * getting right.
+ */
+const NAVIGATION_TIMEOUT_MS = 35_000;
 
 /**
  * How long to wait after navigation for the page to stop changing.

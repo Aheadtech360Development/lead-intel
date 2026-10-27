@@ -771,6 +771,15 @@ export const jobRuns = pgTable("job_runs", {
   costCents: numeric("cost_cents", { precision: 12, scale: 4 }).notNull().default("0"),
 
   startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  /**
+   * Last time the worker reported anything.
+   *
+   * A running row that has not moved for a long while is **stalled**, not busy — and the two look
+   * identical without this. Two discovery runs in this database sat "running" for 28 hours, with
+   * the banner on every screen and every reading page reloading itself every five seconds behind
+   * it, until somebody pressed Stop by hand.
+   */
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
   createdBy: uuid("created_by"),
   /**

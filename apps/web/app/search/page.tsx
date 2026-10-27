@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { AppShell, Banner, Note, PANEL, Panel, StageStrip } from "../ui";
+import { getViewer } from "@/lib/viewer";
+import { AdminOnlyNotice, AppShell, Banner, Note, PANEL, Panel, StageStrip } from "../ui";
 
 /**
  * Pipeline Stage 0 ("Plan"). A plain GET form so the values appear in /search/confirm's URL and
@@ -58,6 +59,21 @@ export default async function NewSearchPage({
   // The preset links come back through the URL, so the form re-renders with the box filled in and
   // the page still needs no client-side JavaScript at all.
   const { niche = "", location = "", error } = await searchParams;
+
+  /**
+   * Admin only, and refused here rather than only hidden from the navigation.
+   *
+   * A member who types this address gets the reason, not a blank page. The database refuses the
+   * write as well — see `lib/viewer.ts` — because a boundary that lives in a menu is not one.
+   */
+  const viewer = await getViewer();
+  if (viewer && !viewer.isAdmin) {
+    return (
+      <AppShell current="leads" email={viewer.email} title="Find businesses" autoRefresh={false}>
+        <AdminOnlyNotice thing="Searching Google Maps" why={"A Maps search creates businesses nobody has seen yet, and it costs money for every search and every listing it brings back. The administrator runs it and hands out what it finds. Importing a spreadsheet and adding a business by hand are both yours, and both free."} />
+      </AppShell>
+    );
+  }
 
   // The ICPs, with the words each one is searched for. Ordered the way they are checked, so the
   // list here reads the same as the list on the ICPs screen.

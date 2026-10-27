@@ -1,6 +1,6 @@
 import { businesses, createDbClient, fieldMetadata } from "@lead-intel/db";
 import { logger, queue, task } from "@trigger.dev/sdk";
-import { and, eq, notExists, sql } from "drizzle-orm";
+import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import { youTubeBusiness } from "../src/youtube.js";
 
 /**
@@ -38,7 +38,19 @@ export const youTubeTask = task({
 export const youTubeRunTask = task({
   id: "youtube-run",
   maxDuration: 3600,
-  run: async (payload: { limit?: number; recheck?: boolean }) => {
+  run: async (payload: {
+    limit?: number;
+    recheck?: boolean;
+    /**
+     * Look up **these** businesses only.
+     *
+     * Added for the same reason score-run gained it: analysing one business was running a
+     * whole-list YouTube pass behind it, which is a hundred lookups against a daily quota of a
+     * hundred — so one crawl could spend the day's entire allowance on businesses nobody asked
+     * about.
+     */
+    businessIds?: string[];
+  }) => {
     const db = createDbClient();
 
     const notLookedUp = notExists(
@@ -48,8 +60,10 @@ export const youTubeRunTask = task({
         .where(and(eq(fieldMetadata.businessId, businesses.id), eq(fieldMetadata.fieldName, "youtube_outcome"))),
     );
 
+    const named = (payload.businessIds ?? []).filter((id) => id.length > 0);
     const conditions = [eq(businesses.status, "active")];
     if (!payload.recheck) conditions.push(notLookedUp);
+    if (named.length > 0) conditions.push(inArray(businesses.id, named));
 
     const rows = await db
       .select({ id: businesses.id })

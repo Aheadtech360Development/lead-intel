@@ -1,6 +1,7 @@
 import { BUSINESS_ORIGIN_LABELS, BUSINESS_ORIGINS, type BusinessOrigin } from "@lead-intel/shared";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer, leadScope } from "@/lib/viewer";
 import { signOut } from "../actions";
 import { analyseUnscored } from "../records/analyse-actions";
 import { AppShell, NextAction, ROUTE_LABELS, SectionHeading, WEBSITE_LABELS } from "../ui";
@@ -19,35 +20,86 @@ import { AppShell, NextAction, ROUTE_LABELS, SectionHeading, WEBSITE_LABELS } fr
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const claims = claimsData?.claims;
+  const viewer = await getViewer();
 
-  const [{ data: all }, { data: analysedRows }, { data: spendRows }, { data: outcomeRows }, { data: batchRows }, { data: socialRows }] =
+  /** A member's dashboard counts their own leads. Nobody else's figure appears on it. */
+  const scope = viewer ? leadScope(viewer) : null;
+  const claims = viewer ? { sub: viewer.id, email: viewer.email } : null;
+
+  const [
+    { data: all },
+    { data: analysedRows },
+    { data: spendRows },
+    { data: outcomeRows },
+    { data: batchRows },
+    { data: socialRows },
+    { data: listingKeys },
+  ] =
     await Promise.all([
-      supabase
-        .from("businesses")
-        .select("id, tier, problem_score, route, website_status, passed_gate, claim_status, origin, icp_name")
-        .eq("status", "active"),
+      (() => {
+        let q = supabase
+          .from("businesses")
+          .select("id, tier, problem_score, route, website_status, passed_gate, claim_status, origin, icp_name")
+          .eq("status", "active");
+        if (scope) q = q.eq(scope.column, scope.value);
+        return q;
+      })(),
       supabase.from("field_metadata").select("business_id").eq("field_name", "website_status_reason").limit(20000),
-      supabase.from("provider_calls").select("endpoint, cost_cents").limit(20000),
-      supabase.from("outcomes").select("id").limit(20000),
+      (() => {
+        let q = supabase.from("provider_calls").select("endpoint, cost_cents").limit(20000);
+        if (viewer && !viewer.isAdmin) q = q.eq("created_by", viewer.id);
+        return q;
+      })(),
+      supabase.from("outcomes").select("id, meeting_date, business_id").limit(20000),
       supabase.from("import_batches").select("id, filename, row_count").eq("status", "imported"),
       supabase
         .from("field_metadata")
         .select("business_id, field_name")
         .in("field_name", ["instagram_url", "instagram_handle", "meta_ads_checked_at", "contact_email"])
         .limit(20000),
+      // A Google listing id is a row in identity_keys, not a column on the business. Last in the
+      // list because the destructuring above reads these in order.
+      supabase.from("identity_keys").select("business_id").eq("key_type", "place_id").limit(20000),
     ]);
 
   const rows = all ?? [];
-  const analysed = new Set((analysedRows ?? []).map((r) => r.business_id));
+
+  /**
+   * The leak this caught, and why the filtering happens here.
+   *
+   * `field_metadata`, `outcomes` and `identity_keys` are pulled whole — they are keyed by business,
+   * not by person, and PostgREST cannot filter them by "businesses this member owns" without a
+   * join. Left as they were, a member's dashboard read *"95 Instagram accounts not looked up"* and
+   * *"email found on 298 sites"* — the whole company's numbers, on a screen that promises theirs.
+   * So every one of them is cut down to this viewer's own businesses before a single figure is
+   * counted.
+   */
+  const mineOnly = <T extends { business_id?: unknown }>(list: T[] | null): T[] => {
+    const data = list ?? [];
+    if (!scope) return data;
+    const ids = new Set(rows.map((r) => r.id as string));
+    return data.filter((row) => ids.has(row.business_id as string));
+  };
+
+  const hasListing = new Set(mineOnly(listingKeys).map((k) => k.business_id as string));
+  const analysed = new Set(mineOnly(analysedRows).map((r) => r.business_id));
   const neverAnalysed = rows.filter((b) => !analysed.has(b.id));
   const worthCalling = rows.filter((b) => b.passed_gate);
   const claimed = rows.filter((b) => b.claim_status !== "unclaimed");
-  const callsLogged = (outcomeRows ?? []).length;
+  const callsLogged = mineOnly(outcomeRows).length;
   const tier1 = rows.filter((b) => b.tier === 1);
 
-  const has = (field: string) => new Set((socialRows ?? []).filter((r) => r.field_name === field).map((r) => r.business_id));
+  /**
+   * The two lines the design asks for that the product could already answer and never did.
+   *
+   * A business that came from a spreadsheet has no Google listing id, and nothing can work one out
+   * from a name — so six checks, and 36% of the Problem score's weight, have no source at all
+   * until the listing is bought. That is not a broken analysis; it is a question nobody has asked.
+   */
+  const importedWithoutListing = rows.filter((b) => b.origin !== "search" && !hasListing.has(b.id));
+  const dueBack = mineOnly(outcomeRows).filter((o) => o.meeting_date !== null);
+
+  const has = (field: string) => new Set(mineOnly(socialRows).filter((r) => r.field_name === field).map((r) => r.business_id));
   const igLinked = has("instagram_url");
   const igBought = has("instagram_handle");
   const adsChecked = has("meta_ads_checked_at");
@@ -143,15 +195,26 @@ export default async function DashboardPage() {
   return (
     <AppShell
       current="dashboard"
+      spentCents={spentCents}
       email={typeof claims?.email === "string" ? claims.email : null}
       signOutAction={signOut}
       title="Dashboard"
       actions={
-        <Link href="/search" className="btn" style={{ textDecoration: "none" }}>
-          Find businesses
-        </Link>
+        viewer?.isAdmin ? (
+          <Link href="/search" className="btn" style={{ textDecoration: "none" }}>
+            Find businesses
+          </Link>
+        ) : (
+          <Link href="/records" className="btn" style={{ textDecoration: "none" }}>
+            Open my leads
+          </Link>
+        )
       }
-      what="How the whole list is doing, and what to do next."
+      what={
+        viewer?.isAdmin
+          ? "How the whole list is doing, and what to do next."
+          : "Your leads, your spend, your tasks — and what is worth doing next."
+      }
     >
       {/*
         ---- 1. The four stages, with their numbers in them ----
@@ -165,8 +228,8 @@ export default async function DashboardPage() {
       <div className="dash-stages">
         <StageColumn
           n={1}
-          name="Sourcing"
-          cost="Can cost"
+          name={viewer?.isAdmin ? "Sourcing" : "Getting leads in"}
+          cost={viewer?.isAdmin ? "Can cost" : "Free"}
           big={rows.length.toLocaleString()}
           bigLabel="businesses in your list"
           lines={[
@@ -176,7 +239,11 @@ export default async function DashboardPage() {
               href: `/records?view=everything&from=${o.origin}`,
             })),
           ]}
-          go={{ href: "/search", label: "Find businesses" }}
+          go={
+            viewer?.isAdmin
+              ? { href: "/search", label: "Find businesses" }
+              : { href: "/records/import", label: "Import a list" }
+          }
         />
         <StageColumn
           n={2}
@@ -306,19 +373,63 @@ export default async function DashboardPage() {
           />
         )}
 
+        {importedWithoutListing.length > 0 && (
+          <NextAction
+            tone="warn"
+            icon="🗺️"
+            title={`${importedWithoutListing.length} leads cannot be checked on Google`}
+            body={
+              <>
+                A spreadsheet carries no Google listing, so their reviews and search checks have{" "}
+                <strong>no source at all</strong> — that is 36% of the Problem score standing on nothing. Buying the
+                listing answers six checks and re-scores them. <strong>3.5¢ each</strong>, billed by Google Places,
+                after you confirm.
+              </>
+            }
+            action={
+              <Link href="/records/enrich" className="btn-2 btn">
+                Get listing data
+              </Link>
+            }
+          />
+        )}
+
+        {dueBack.length > 0 && (
+          <NextAction
+            tone="good"
+            icon="↩️"
+            title={`${dueBack.length} ${dueBack.length === 1 ? "lead is" : "leads are"} waiting on a call back`}
+            body="You set a date when you logged the call. It lives on the call and on the lead — there is no reminders screen in this product, so this is where it surfaces."
+            action={
+              <Link href="/calls?show=due" className="btn-2 btn">
+                See the calls
+              </Link>
+            }
+          />
+        )}
+
         {rows.length === 0 && (
           <NextAction
             tone="brand"
             icon="🔎"
-            title="No businesses yet"
-            body="Find them on Google Maps for one of your ICPs, or upload a list you already have."
+            title={viewer?.isAdmin ? "No businesses yet" : "You have not been given any leads yet"}
+            body={
+              viewer?.isAdmin
+                ? "Find them on Google Maps for one of your ICPs, or upload a list you already have."
+                : "Nothing has been handed to you — that is all this means. Bringing in your own list is free, and so is adding one by hand."
+            }
             action={
               <span style={{ display: "flex", gap: 8 }}>
-                <Link href="/search" className="btn">
-                  Find businesses
-                </Link>
-                <Link href="/records/import" className="btn-2 btn">
+                {viewer?.isAdmin ? (
+                  <Link href="/search" className="btn">
+                    Find businesses
+                  </Link>
+                ) : null}
+                <Link href="/records/import" className={viewer?.isAdmin ? "btn-2 btn" : "btn"}>
                   Import a list
+                </Link>
+                <Link href="/records/new" className="btn-2 btn">
+                  Add one by hand
                 </Link>
               </span>
             }
@@ -378,7 +489,7 @@ export default async function DashboardPage() {
           </div>
           <div style={{ fontSize: 15, color: "var(--ink-2)" }}>spent with every provider, all time</div>
           <div style={{ fontSize: 14.5, color: "var(--ink-3)", marginTop: 12, lineHeight: 1.55 }}>
-            Reading websites, the 51 checks, scoring and your ICPs cost nothing. Anything that costs
+            Reading websites, the 64 checks, scoring and your ICPs cost nothing. Anything that costs
             money is bought only for businesses you pick, after a screen that shows the price.
           </div>
           <Link href="/spend" style={{ display: "inline-block", marginTop: 12, fontSize: 15 }}>

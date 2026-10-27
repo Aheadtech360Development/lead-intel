@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
+import { AdminOnlyNotice, AppShell } from "../../../ui";
 
 const sectionStyle: React.CSSProperties = {
   background: "var(--surface)",
@@ -47,6 +49,15 @@ export default async function RunStatusPage({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ partial?: string; of?: string; started?: string }>;
 }) {
+  const viewer = await getViewer();
+  if (viewer && !viewer.isAdmin) {
+    return (
+      <AppShell current="leads" email={viewer.email} title="Find businesses" autoRefresh={false}>
+        <AdminOnlyNotice thing="Searching Google Maps" why={"A Maps search creates businesses nobody has seen yet, and it costs money for every search and every listing it brings back. The administrator runs it and hands out what it finds. Importing a spreadsheet and adding a business by hand are both yours, and both free."} />
+      </AppShell>
+    );
+  }
+
   const { id } = await params;
   const { partial, of, started } = await searchParams;
   const supabase = await createClient();

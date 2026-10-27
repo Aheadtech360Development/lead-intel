@@ -2,7 +2,8 @@ import { businesses, createDbClient, fieldMetadata, findings } from "@lead-intel
 import { logger, task } from "@trigger.dev/sdk";
 import { auditSiteTask } from "./audit-site.js";
 import { jobProgress } from "../src/job-progress.js";
-import { and, eq, notExists, sql } from "drizzle-orm";
+import { applyStoredListingFacts } from "../src/listing-facts.js";
+import { and, eq, exists, notExists, sql } from "drizzle-orm";
 import { auditWebsiteTask } from "./audit-website.js";
 import { matchIcpsRunTask } from "./match-icps.js";
 import { pageSpeedTask } from "./pagespeed.js";
@@ -175,15 +176,45 @@ export const analyseRunTask = task({
         stoppedOnQuota: false,
       };
       await progress.say("Checking YouTube channels");
-      const youtubeRun = await youTubeRunTask.triggerAndWait({});
+      // Scoped to what was just analysed when the operator named a set. Unscoped it would spend
+      // the day's whole YouTube quota — about a hundred lookups — behind a single crawl.
+      const youtubeRun = await youTubeRunTask.triggerAndWait(
+        explicit.length > 0 ? { businessIds: toAudit } : {},
+      );
       if (youtubeRun.ok) youtube = youtubeRun.output;
       else logger.warn("YouTube pass did not complete; scores below are otherwise unaffected");
 
       // Scores everything analysed, not only this batch. Rescoring is pure arithmetic over findings
       // already stored — no crawl, no cost — and running it whole means one set of weights applies
       // to the entire list rather than the newest rows carrying a different vintage.
-      await progress.say("Scoring and sorting everything");
-      await scoreRunTask.triggerAndWait({});
+      /**
+       * The Google facts already stored, turned into findings before anything is scored.
+       *
+       * Free and local: it reads `field_metadata` and writes `findings`, with no provider involved.
+       * It is here rather than in the crawl because it is not about their website at all — it is
+       * the rating and review count that came back with the Maps search and that nothing had ever
+       * scored. See apps/jobs/src/listing-facts.ts.
+       */
+      const listingScope = explicit.length > 0 ? toAudit : await idsFromGoogle(db, payload.limit ?? 20_000);
+      if (listingScope.length > 0) {
+        await progress.say("Working out the Google rating and review checks");
+        const listingFacts = await applyStoredListingFacts(db, listingScope);
+        logger.info("listing facts applied", listingFacts);
+      }
+
+      /**
+       * Scored, scoped to what actually changed.
+       *
+       * This used to re-score the whole list on every run, which read well as a principle — "one
+       * set of weights applies to the entire list" — and cost fourteen minutes of waiting after a
+       * crawl that took seconds. Nothing about a business nobody touched can have changed, so the
+       * whole-list pass belongs on the Re-score everything button, not behind every analysis.
+       */
+      const scoreScope = explicit.length > 0 ? toAudit : [];
+      await progress.say(
+        scoreScope.length > 0 ? `Scoring ${scoreScope.length} of them` : "Scoring and sorting everything",
+      );
+      await scoreRunTask.triggerAndWait(scoreScope.length > 0 ? { businessIds: scoreScope } : {});
 
       // Last, because it is the only step that reads what the crawl wrote. A rule looking for
       // "embroidery" on a website needs the website to have been read first.
@@ -248,6 +279,32 @@ async function idsWithoutFindings(
       and(
         eq(businesses.status, "active"),
         notExists(db.select({ one: sql`1` }).from(findings).where(eq(findings.businessId, businesses.id))),
+      ),
+    )
+    .limit(limit);
+  return rows.map((r) => r.id);
+}
+
+/**
+ * Everyone Google has ever told us a rating or a review count about.
+ *
+ * The scope for the stored-listing pass. Keyed on `rating` rather than on origin, because an
+ * imported business that was later matched to a Maps result has the same facts and the same right
+ * to have them scored.
+ */
+async function idsFromGoogle(db: ReturnType<typeof createDbClient>, limit: number): Promise<string[]> {
+  const rows = await db
+    .select({ id: businesses.id })
+    .from(businesses)
+    .where(
+      and(
+        eq(businesses.status, "active"),
+        exists(
+          db
+            .select({ one: sql`1` })
+            .from(fieldMetadata)
+            .where(and(eq(fieldMetadata.businessId, businesses.id), eq(fieldMetadata.fieldName, "rating"))),
+        ),
       ),
     )
     .limit(limit);

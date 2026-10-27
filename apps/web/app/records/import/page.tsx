@@ -267,7 +267,7 @@ export default async function ImportPage({
                 tone="brand"
                 title="Read their websites and score them"
                 price="Free"
-                describes="Crawls each site — home page, contact, about, socials — runs all 51 checks, measures their speed, then works out a problem score, a priority and what to sell them. This is what turns a row in a spreadsheet into a lead."
+                describes="Crawls each site — home page, contact, about, socials — runs all 64 checks, measures their speed, then works out a problem score, a priority and what to sell them. This is what turns a row in a spreadsheet into a lead."
               />
 
               <Job

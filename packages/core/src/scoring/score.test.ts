@@ -386,3 +386,127 @@ describe("coverage with only the FREE checks built", () => {
     expect(areas.ADS.enoughData).toBe(true);
   });
 });
+
+/**
+ * The regression that this suite did not catch, and now does.
+ *
+ * Scoring the Google rating and review count for every business — right in itself — gave REP a
+ * score for businesses whose website nobody could read. That took them out of the "nothing was
+ * measured" branch the demand rescue lived in, and 19 of the best leads on the live list came out
+ * at Problem 0, Priority 4: Kiwi Beauty Supply with 4,858 reviews among them.
+ */
+describe("proven demand behind an unreadable website", () => {
+  const listingOnly = (reviews: number, rating: number) =>
+    scoreBusiness({
+      findings: [
+        { checkId: "R1", family: "R", area: "REP", costClass: "PAID", outcome: "passed", points: 0, maxPoints: 35, evidence: `${reviews} reviews` },
+        { checkId: "R2", family: "R", area: "REP", costClass: "PAID", outcome: "passed", points: 0, maxPoints: 30, evidence: `${rating} stars` },
+        { checkId: "S1", family: "S", area: "SEO", costClass: "PAID", outcome: "passed", points: 0, maxPoints: 40, evidence: "has a listing" },
+      ],
+      presence: "unclear",
+      demand: { reviewCount: reviews, rating, instagramFollowers: null },
+    });
+
+  it("keeps a business with hundreds of reviews and no readable site at Priority 1", () => {
+    const score = listingOnly(4858, 4.7);
+    expect(score.tier).toBe(1);
+    expect(score.problemScore).toBe(90);
+    expect(score.route).toBe("web_development");
+    expect(score.passedGate).toBe(true);
+  });
+
+  it("still refuses a chain, whose listed site belongs to head office", () => {
+    const score = scoreBusiness({
+      findings: [
+        { checkId: "R1", family: "R", area: "REP", costClass: "PAID", outcome: "passed", points: 0, maxPoints: 35, evidence: "2428 reviews" },
+      ],
+      presence: "unclear",
+      sharedDomainReason: "The listed website is the national michaels.com site, not this location's own.",
+      demand: { reviewCount: 2428, rating: 4.4, instagramFollowers: null },
+    });
+    expect(score.tier).not.toBe(1);
+    expect(score.passedGate).toBe(false);
+  });
+
+  it("never quietens a business the checks did find fault with", () => {
+    const score = scoreBusiness({
+      findings: [
+        { checkId: "R1", family: "R", area: "REP", costClass: "PAID", outcome: "fired", points: 35, maxPoints: 35, evidence: "3 reviews" },
+        { checkId: "R2", family: "R", area: "REP", costClass: "PAID", outcome: "fired", points: 30, maxPoints: 30, evidence: "2.1 stars" },
+      ],
+      presence: "unclear",
+      demand: { reviewCount: 3, rating: 2.1, instagramFollowers: null },
+    });
+    // No proven demand here, so the ordinary path runs and the real problem score stands.
+    expect(score.problemScore).toBe(100);
+  });
+});
+
+/**
+ * The 49 live businesses whose Google listing carries no website at all.
+ *
+ * `classifyPresence` will not call them `no_website` — §4 wants three checks and only one exists —
+ * and that refusal was leaving them at an average Problem of 53.4 and Priority 3. The certainty is
+ * still withheld; the score is not.
+ */
+describe("a listing Google says has no website", () => {
+  const s6Fired = {
+    checkId: "S6",
+    family: "S" as const,
+    area: "SEO" as const,
+    costClass: "PAID" as const,
+    outcome: "fired" as const,
+    points: 30,
+    maxPoints: 30,
+    evidence: "The Google listing has no website link.",
+  };
+
+  it("is the biggest problem there is, even though the status stays unclear", () => {
+    const score = scoreBusiness({
+      findings: [
+        s6Fired,
+        { checkId: "R1", family: "R", area: "REP", costClass: "PAID", outcome: "passed", points: 0, maxPoints: 35, evidence: "40 reviews" },
+      ],
+      presence: "unclear",
+      demand: { reviewCount: 40, rating: 4.1, instagramFollowers: null },
+    });
+
+    expect(score.problemScore).toBe(90);
+    expect(score.route).toBe("web_development");
+    // Still unconfirmed, and the line says so rather than claiming certainty.
+    expect(score.routeReason).toContain("very likely rather than certain");
+    expect(score.needsManualReview).toBe(true);
+  });
+
+  it("scores one with nothing else measured at all, rather than refusing", () => {
+    const score = scoreBusiness({ findings: [s6Fired], presence: "unclear" });
+
+    expect(score.problemScore).toBe(90);
+    expect(score.tier).toBe(3); // a lot wrong, no sign yet that they spend
+    expect(score.passedGate).toBe(true);
+  });
+
+  /** A site that loads is not short of a website, whatever its listing forgot to mention. */
+  it("does not fire for a business whose website works", () => {
+    const score = scoreBusiness({
+      findings: [
+        s6Fired,
+        { checkId: "K1", family: "K", area: "CON", costClass: "FREE", outcome: "passed", points: 0, maxPoints: 25, evidence: "phone on the page" },
+      ],
+      presence: "live",
+    });
+    // Null, not 90: their site loads, and two checks is not enough coverage to score anything.
+    // "We have not measured enough" is the right answer; "they have no website" would be a lie.
+    expect(score.problemScore).toBeNull();
+    expect(score.route).not.toBe("web_development");
+  });
+
+  it("still refuses a chain", () => {
+    const score = scoreBusiness({
+      findings: [s6Fired],
+      presence: "unclear",
+      sharedDomainReason: "The listed website is a national chain's.",
+    });
+    expect(score.passedGate).toBe(false);
+  });
+});

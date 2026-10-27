@@ -9,7 +9,9 @@ import {
 import Link from "next/link";
 import { instagramCandidateIds } from "@/lib/instagram-candidates";
 import { selectFilteredIds } from "@/lib/lead-filters";
+import { budgetFor, canAfford, money as budgetMoney, PERIOD_WORDS } from "@/lib/budget";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
 import { AppShell, Banner, Money, Note, PANEL, Panel, StageStrip } from "../../ui";
 import { buyEnrichment } from "./actions";
 
@@ -180,6 +182,16 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
     availableEnvVars: Object.keys(process.env).filter((k) => Boolean(process.env[k])),
   });
 
+  /**
+   * What this person may spend, and whether the most this screen could cost fits inside it.
+   *
+   * Checked here as well as in the action, because the useful moment to say "you cannot afford
+   * this" is before somebody has chosen what to buy — not after they press the button.
+   */
+  const viewer = await getViewer();
+  const budget = viewer ? await budgetFor(viewer) : null;
+  const affordable = canAfford(budget, estimate.totalCents);
+
   return (
     <Shell>
       <h1 style={{ fontSize: 27, margin: "0 0 4px" }}>Buy extra data for {businessIds.length} businesses</h1>
@@ -200,6 +212,45 @@ export default async function EnrichPage({ searchParams }: { searchParams: Promi
       {params.error && (
         <Banner tone="bad">{decodeURIComponent(params.error)}</Banner>
       )}
+
+      {budget ? (
+        <div
+          className="card"
+          style={{
+            padding: "13px 16px",
+            marginBottom: 16,
+            display: "flex",
+            gap: 14,
+            flexWrap: "wrap",
+            alignItems: "center",
+            borderLeft: affordable.ok ? "3px solid var(--good)" : "3px solid var(--bad)",
+          }}
+        >
+          <div style={{ flex: "1 1 320px", minWidth: 0 }}>
+            <strong style={{ fontSize: 15.5 }}>
+              {affordable.ok
+                ? `You have ${budgetMoney(budget.leftCents)} left to spend`
+                : "This is more than you have left"}
+            </strong>
+            <div style={{ fontSize: 14, color: "var(--ink-2)", marginTop: 3, lineHeight: 1.55 }}>
+              {affordable.ok ? (
+                <>
+                  Everything ticked below would cost at most{" "}
+                  <strong>{budgetMoney(estimate.totalCents)}</strong>. Your allowance resets{" "}
+                  {PERIOD_WORDS[budget.period]}.
+                </>
+              ) : (
+                affordable.why
+              )}
+            </div>
+          </div>
+          {!affordable.ok ? (
+            <Link href="/spend" className="btn-2 btn" style={{ textDecoration: "none" }}>
+              See my spend
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
 
       <form action={buyEnrichment}>
         {businessIds.map((id) => (

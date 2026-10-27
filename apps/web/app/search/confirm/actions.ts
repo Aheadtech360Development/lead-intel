@@ -6,6 +6,7 @@ import { tasks } from "@trigger.dev/sdk";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
 import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/viewer";
 
 /**
  * Creates the run row (pipeline Stage 0 → the moment the operator confirmed) and enqueues the
@@ -13,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
  * boundary the rest of this repo already draws around the service role key.
  */
 export async function createRun(formData: FormData): Promise<void> {
+  await requireAdmin("/search");
   const icpId = ((formData.get("icp") as string) ?? "").trim();
   const typedNiche = (formData.get("niche") as string)?.trim();
   const location = (formData.get("location") as string)?.trim();

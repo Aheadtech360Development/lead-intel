@@ -1,8 +1,10 @@
 import { ENRICHMENT_DEFINITIONS } from "@lead-intel/shared";
 import { businesses, describeDbError, fieldMetadata, type Database } from "@lead-intel/db";
+import { runMetaAdsChecks } from "@lead-intel/core";
 import { fetchMetaAds, isApifyFatal, isMetaAdsOk } from "@lead-intel/providers";
 import { and, eq } from "drizzle-orm";
 import { upsertFieldMetadata } from "./field-metadata.js";
+import { upsertFindings } from "./findings.js";
 import { recordProviderCall } from "./provider-calls.js";
 import { scoreAndStore } from "./scoring.js";
 
@@ -114,6 +116,31 @@ export async function metaAdsBusiness(db: Database, businessId: string): Promise
 
   try {
     await upsertFieldMetadata(db, businessId, fields);
+
+    /**
+     * **The findings, which are the part the score can actually read.**
+     *
+     * Until this line existed, the most expensive lookup in the product — about 11.6¢ a business
+     * with Apify — wrote eight fields onto the record, re-scored, and could not move the number by
+     * construction: scoring reads `findings`, and nothing wrote one from this purchase. D5 ("not
+     * currently advertising", a problem worth 15) and N2 ("currently running Meta ads", 25 points
+     * of intent) both had no producer at all.
+     *
+     * A failed lookup lands too, as an unmeasured finding carrying the reason. Silence and "we
+     * looked and they run no ads" must never look the same on the record.
+     */
+    await upsertFindings(
+      db,
+      businessId,
+      runMetaAdsChecks({
+        pageFound: found,
+        runningAds: found ? result.runningAds : null,
+        activeCount: found ? result.activeCount : null,
+        runningSince: found ? result.runningSince : null,
+        unavailableReason: found ? null : "Their Facebook page could not be read.",
+      }),
+      { sourceName: "apify_metaads" },
+    );
   } catch (err) {
     throw new Error(`failed to record Meta ads for ${business.name}: ${describeDbError(err)}`);
   }

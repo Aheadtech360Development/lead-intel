@@ -3,6 +3,7 @@ import { ENRICHMENT_DEFINITIONS } from "@lead-intel/shared";
 import Link from "next/link";
 import { instagramCandidateIds } from "@/lib/instagram-candidates";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer, leadScope } from "@/lib/viewer";
 import { signOut } from "../actions";
 import { AppShell, Badge, FilterOption, FilterSection, InfoBox, Note, PANEL, Panel, TD, Th, TierBadge } from "../ui";
 
@@ -42,15 +43,22 @@ const BANDS: { key: string; label: string; hint: string; min: number; max: numbe
 export default async function InstagramPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const claims = claimsData?.claims;
+  const viewer = await getViewer();
+
+  /** A member's social screen covers their own leads only. */
+  const scope = viewer ? leadScope(viewer) : null;
+  const claims = viewer ? { sub: viewer.id, email: viewer.email } : null;
 
   const [{ data: businessRows }, { data: fieldRows }, { data: batchRows }] = await Promise.all([
-    supabase
-      .from("businesses")
-      .select("id, display_name, city, state, tier, problem_score, route, origin, import_batch_id, icp_name")
-      .eq("status", "active")
-      .limit(5000),
+    (() => {
+      let q = supabase
+        .from("businesses")
+        .select("id, display_name, city, state, tier, problem_score, route, origin, import_batch_id, icp_name")
+        .eq("status", "active")
+        .limit(5000);
+      if (scope) q = q.eq(scope.column, scope.value);
+      return q;
+    })(),
     supabase
       .from("field_metadata")
       .select("business_id, field_name, value")
@@ -75,8 +83,17 @@ export default async function InstagramPage({ searchParams }: { searchParams: Pr
   // One row per business, with whatever Instagram facts exist for it. Fields arrive as rows and are
   // folded here rather than joined, which keeps this to three queries however many fields there are.
   const facts = new Map<string, Record<string, string>>();
+  /**
+   * Keyed by business, so it has to be cut down to the businesses this viewer can see.
+   *
+   * `field_metadata` is pulled whole because PostgREST cannot filter it by "businesses this member
+   * owns" without a join. Folding it blind would put the whole company's Instagram counts on a
+   * member's screen — which is exactly what the member side promises it will never do.
+   */
+  const visible = new Set((businessRows ?? []).map((b) => b.id as string));
   for (const f of fieldRows ?? []) {
     if (!f.business_id) continue;
+    if (scope && !visible.has(f.business_id)) continue;
     const bag = facts.get(f.business_id) ?? {};
     bag[f.field_name] = f.value;
     facts.set(f.business_id, bag);

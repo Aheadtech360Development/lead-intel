@@ -93,6 +93,50 @@ export function scoreBusiness(params: {
   const manualReviewReasons: ManualReviewReason[] = [];
   if (params.sharedDomainReason) manualReviewReasons.push("shared_domain");
 
+  /**
+   * **Google's own listing says there is no website.**
+   *
+   * S6 fires only when the listing was read and carried no website link — a fact reported by
+   * Google, not an inference from a failed crawl. It is read straight off the findings rather than
+   * passed in, so no caller can forget to supply it.
+   *
+   * This exists because of a gap that cost the operator their best leads. `classifyPresence`
+   * refuses to return `no_website` on purpose: §4 wants three checks — the listing field, a
+   * Facebook lookup and a name search — and only the first exists, so a business with no website
+   * comes back as `unclear`. That refusal is right about certainty and was wrong about
+   * consequence: 49 live businesses whose listing has no website sat at an average Problem score
+   * of **53.4 and Priority 3**, when "no website at all" is the single biggest problem a local
+   * business can have and the clearest thing this agency sells.
+   *
+   * So the certainty stays where it was — the status is still `unclear`, the record is still
+   * flagged for a human — and the **score** stops pretending the question is open. The reason line
+   * says exactly what is known and what is not.
+   */
+  const listingHasNoWebsite = params.findings.some((f) => f.checkId === "S6" && f.outcome === "fired");
+
+  const NO_SITE_REASON =
+    "Google's listing carries no website at all. Confirming it absolutely would also need a Facebook check and a name search, which this system cannot do yet — so treat it as very likely rather than certain. Nothing else can be sold until they have a site.";
+
+  /**
+   * Proven demand behind a website nobody could read.
+   *
+   * Worked out here rather than inside the "nothing measured" branch below, because that branch
+   * stopped being the only way to arrive at this state. The moment the Google rating and review
+   * count started being scored for every business (apps/jobs/src/listing-facts.ts), REP began to
+   * carry a score on its own — so a business with 4,858 reviews, no readable website and nothing
+   * else measured fell out of the rescue it was written for and came out at **Problem 0, Priority
+   * 4**, which is the exact opposite of what it is. Kiwi Beauty Supply, One Hour Tees and 17 others
+   * did precisely that on the live list.
+   *
+   * `unclear` is the condition because that is what it means: the site could not be read. A site
+   * that *was* read lands on one of the other four presence states, so this can never override a
+   * business we actually measured.
+   */
+  const demand =
+    params.presence === "unclear" && !params.sharedDomainReason && params.demand
+      ? provenDemand(params.demand, params.demandThresholds ?? DEFAULT_DEMAND_THRESHOLDS)
+      : null;
+
   if (scored.length === 0) {
     // Nothing was measured well enough to score. This is a real and common state — a site that
     // could not be read produces exactly it — and it must not collapse into "no problems".
@@ -111,11 +155,6 @@ export function scoreBusiness(params: {
      * the candidates — a naive version would have put a national retailer at the top of a local
      * agency's call list.
      */
-    const demand =
-      params.presence === "unclear" && !params.sharedDomainReason && params.demand
-        ? provenDemand(params.demand, params.demandThresholds ?? DEFAULT_DEMAND_THRESHOLDS)
-        : null;
-
     if (demand) {
       return {
         areas,
@@ -150,6 +189,29 @@ export function scoreBusiness(params: {
       };
     }
 
+    /**
+     * No website, and not enough reviews to be rescued by demand either.
+     *
+     * Still a Priority 3 lead rather than an unscorable one: "they have no website" is a complete
+     * finding on its own, and the grid files it correctly — a lot wrong, no sign yet that they
+     * spend money on their presence.
+     */
+    // Never for a site that loads. A listing that forgot to mention its website is an SEO
+    // problem, not a missing website, and the test that caught this had the two confused.
+    if (listingHasNoWebsite && params.presence !== "live" && !params.sharedDomainReason) {
+      return {
+        areas,
+        problemScore: PRESENCE_OVERRIDE_PROBLEM_SCORE,
+        intentScore,
+        tier: toTier(PRESENCE_OVERRIDE_PROBLEM_SCORE, intentScore),
+        route: "web_development",
+        routeReason: NO_SITE_REASON,
+        passedGate: true,
+        needsManualReview: true,
+        manualReviewReasons: [...manualReviewReasons, "unclear_website_status"],
+      };
+    }
+
     return {
       areas,
       problemScore: null,
@@ -179,8 +241,12 @@ export function scoreBusiness(params: {
 
   // §6.2's override. A business with no website, a dead one, or only a social page has a problem
   // no other area can outrank, and nothing else can be sold until there is a website (§6.5).
+  // The fourth case is a listing Google says has no website — see `listingHasNoWebsite` above.
   const presenceOverride =
-    params.presence === "no_website" || params.presence === "dead" || params.presence === "social_only";
+    params.presence === "no_website" ||
+    params.presence === "dead" ||
+    params.presence === "social_only" ||
+    (params.presence === "unclear" && listingHasNoWebsite);
   if (presenceOverride) {
     problemScore = Math.max(problemScore, PRESENCE_OVERRIDE_PROBLEM_SCORE);
     forcedRoute = "web_development";
@@ -196,7 +262,9 @@ export function scoreBusiness(params: {
         ? "No website at all — nothing else can be sold until there is one."
         : params.presence === "dead"
           ? "The website is dead or parked — rebuilding it comes before anything else."
-          : "Only a social page, no website of their own.";
+          : params.presence === "social_only"
+            ? "Only a social page, no website of their own."
+            : NO_SITE_REASON;
   } else if (winner.firedCount === 0) {
     // §6.5, verbatim: a recommendation with nothing to show is not a recommendation.
     route = null;
@@ -208,6 +276,37 @@ export function scoreBusiness(params: {
   }
 
   if (params.presence === "unclear") manualReviewReasons.push("unclear_website_status");
+
+  /**
+   * The same rescue, applied after the areas have had their say.
+   *
+   * Reaching here means something was measured — but when the only thing that could be measured is
+   * their Google listing, "measured" can amount to "they have 4,858 reviews and a 4.7 rating", and
+   * every one of those checks **passes**. REP then scores 0, the Problem score follows it down, and
+   * the strongest lead on the list is filed at Priority 4 with nothing to say about it.
+   *
+   * So demand wins here too. The Problem score takes whichever is higher — the measured one or the
+   * override — so this can only ever raise a business, never quieten one the checks found fault
+   * with. The route is Web development for the reason it always is: there is no website to work
+   * with, and nothing else can be sold until there is one.
+   */
+  if (demand) {
+    return {
+      areas,
+      problemScore: Math.max(problemScore, PRESENCE_OVERRIDE_PROBLEM_SCORE),
+      intentScore,
+      // Tier 1 outright rather than through §6.4's grid — see the note in the branch above for why
+      // the grid cannot answer this question.
+      tier: 1,
+      route: "web_development",
+      routeReason: demandRouteReason(demand),
+      passedGate: true,
+      // Still flagged: the website status is genuinely unconfirmed, and the operator should see
+      // that before the call rather than discover it during one.
+      needsManualReview: true,
+      manualReviewReasons,
+    };
+  }
 
   return {
     areas,

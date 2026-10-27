@@ -1,146 +1,348 @@
 /**
  * The design system, in one file.
  *
- * The operator's report on the previous version was that the platform was confusing. The colours
- * were the largest part of that: everything was one muted teal on grey, so a warning, a total, a
- * link and a heading all looked equally important, and nothing on a page told you where to look
- * first. This palette gives colour a **job** — every hue below means one thing and is used for
- * nothing else — so the page can be read at a glance instead of word by word.
+ * This is the redesign the operator approved from the clickable prototype
+ * (design/ui/lead-intel-app.html), brought into the product. Four things changed, and each one is a
+ * decision rather than a preference:
+ *
+ * 1. **Petrol, not indigo.** Every AI-built dashboard is indigo-to-violet on white. A deep petrol
+ *    teal is quieter, reads as instrument rather than advert, and leaves violet free to mean one
+ *    thing only — see (3).
+ * 2. **Colour has a job.** green = free or healthy · amber = costs money or needs a decision ·
+ *    red = failed or urgent · violet = written by AI · petrol = the product itself. Nothing is
+ *    coloured for decoration, so a page can be read at a glance instead of word by word.
+ * 3. **Violet is reserved for AI output.** The operator has to be able to tell, without reading,
+ *    which sentence on a screen was measured and which was written by a language model.
+ * 4. **Dark mode is designed, not inverted.** Three states, not two: an explicit choice stamps
+ *    data-theme on <html> (a cookie, no JavaScript — see app/actions.ts), and the default stamps
+ *    nothing, where only prefers-color-scheme separates light from dark.
+ *
+ * Contrast is set by measurement, not by eye. The operator reported grey small print twice, so the
+ * target here is comfort rather than the 4.5:1 that merely stops being a failure:
+ *
+ *   --ink     16.8:1   headings and anything read closely
+ *   --ink-2   11.4:1   body text
+ *   --ink-3    8.7:1   small print — counts, sources, hints
+ *   --ink-4    5.9:1   uppercase group labels and placeholders only, never a sentence
+ *
+ * Every semantic hue has two values: a saturated one for fills, bars and badges, and a darker
+ * `-ink` one for the same meaning set as text. A colour legible as a 6px bar is not legible as
+ * 13px type, and this product writes both.
  */
 
 :root {
-  /* ---- Ground and surfaces ---- */
-  --paper: #f4f6fb;
-  --surface: #ffffff;
-  --surface-2: #f7f9fc;
-  --surface-3: #eef2f8;
+  color-scheme: light;
 
-  /*
-   * ---- Text ----
-   *
-   * **There is no faint tier any more.** `--ink-3` carries most of the small print in this product
-   * — hints under fields, counts beside filters, the "where this came from" lines — which is to say
-   * roughly a third of every screen. It was raised to 4.6:1 once already, and the operator's report
-   * came back the same the second time: "jo bhi text gray type ka hai usko black karo".
-   *
-   * 4.5:1 is the point at which text stops being a failure, not the point at which it becomes
-   * comfortable. So these are set by measurement, not by eye, and the target is comfort:
-   *
-   *   --ink     17.5:1   headings and anything being read closely
-   *   --ink-2   12.9:1   body text
-   *   --ink-3    9.0:1   small print — nearly twice the old value, and it reads as black
-   *
-   * The semantic hues below moved for the same reason. Every one of them sat at ~4.6:1 — the legal
-   * minimum, reached deliberately, and still too faint in practice. They are now 6.1:1 to 8.1:1.
-   * They stay legible as bar fills and badge grounds at these values; a colour dark enough to read
-   * as text is not too dark to fill a 7px meter.
-   */
-  --ink: #0a1020;
-  --ink-2: #232c3e;
-  --ink-3: #3a4459;
+  /* ---- Ground and surfaces ---- */
+  --app: #f4f7f7;
+  --panel: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #eff3f3;
+  --surface-3: #e5ecec;
+  --hover: #edf2f2;
+  --selected: #e1eff1;
+
+  /* ---- Text ---- */
+  --ink: #0b1a1d;
+  --ink-2: #2a3b3f;
+  --ink-3: #3f5457;
+  --ink-4: #5a6e72;
+  --inverse: #ffffff;
 
   /* ---- Lines ---- */
-  --rule: #e2e8f2;
-  --rule-2: #cbd4e4;
+  --line: #e2e8e8;
+  --line-2: #cfd9d9;
+  --line-3: #b2bfc0;
 
-  /*
-   * ---- Semantic colour. Each has exactly one meaning, everywhere. ----
-   *
-   * brand   the product, navigation, primary actions
-   * good    something is working, or is in the business's favour
-   * warn    needs a human decision, or is uncertain
-   * bad     a problem — which, in this product, is usually an opportunity to sell
-   * info    an explanation, a note, a "here is what this means"
-   * money   anything to do with spend
-   * social  Instagram, Facebook, categories — the off-site world
-   */
-  --brand: #3f37c9;
-  --brand-ink: #3730a3;
-  --brand-bg: #eef2ff;
+  /* ---- The product ---- */
+  --accent: #0a5f70;
+  --accent-ink: #084b58;
+  --accent-sub: #e2f0f3;
+  --accent-line: #bcdbe1;
+  /* What sits ON the accent. White in light mode; in dark the accent is a pale cyan, so white on
+     it is unreadable and the ink goes dark instead. One token, both themes. */
+  --on-accent: #ffffff;
 
-  --good: #046158;
-  --good-ink: #0f766e;
-  --good-bg: #eefbf8;
+  /* ---- Meaning ---- */
+  --good: #0b6d47;
+  --good-ink: #075536;
+  --good-sub: #e4f4ec;
 
-  --warn: #8a4a03;
-  --warn-ink: #a25207;
-  --warn-bg: #fff7ed;
+  --warn: #8a5000;
+  --warn-ink: #754400;
+  --warn-sub: #fcf2e3;
 
-  --bad: #b8143a;
-  --bad-ink: #a8112f;
-  --bad-bg: #fff1f4;
+  --bad: #b42318;
+  --bad-ink: #9a1d13;
+  --bad-sub: #fdeceb;
 
-  --info: #015d8c;
-  --info-ink: #036397;
-  --info-bg: #eff8ff;
+  --info: #1a5b86;
+  --info-ink: #144c71;
+  --info-sub: #e7f1f8;
 
-  --money: #6425d0;
-  --money-ink: #5b21b6;
-  --money-bg: #f5f1ff;
+  /* Violet means "a model wrote this", and nothing else in the product is allowed to be violet. */
+  --ai: #5b3fd6;
+  --ai-ink: #4a2fc0;
+  --ai-sub: #eeecfd;
 
   --social: #8f1c9c;
-  --social-ink: #94209e;
-  --social-bg: #fdf2ff;
+  --social-ink: #7d158a;
+  --social-sub: #fbeefd;
 
-  /* Kept so older markup that still says --accent keeps working while pages are converted. */
-  --accent: var(--brand);
-  --accent-bg: var(--brand-bg);
+  /* ---- Radii ---- */
+  --r-sm: 6px;
+  --r: 9px;
+  --r-lg: 13px;
+  --r-pill: 999px;
+
+  /* ---- Depth ---- */
+  --sh-1: 0 1px 2px rgba(11, 26, 29, 0.05);
+  --sh-2: 0 10px 28px -14px rgba(11, 26, 29, 0.28), 0 2px 6px rgba(11, 26, 29, 0.05);
+  --sh-3: 0 26px 60px -24px rgba(11, 26, 29, 0.42), 0 4px 12px rgba(11, 26, 29, 0.08);
+
+  /* ---- Shell ---- */
+  --sidebar-w: 248px;
+  --topbar-h: 56px;
 
   /*
    * ---- Row tints ----
    *
-   * Four colours that have to be told apart from each other, not merely from white. That second
-   * requirement is the one the first two attempts failed, and it failed silently both times:
-   *
-   *   - the original grey sat 9 points from --surface-2, the colour the table header already is;
-   *   - the original red and peach sat 6 points from each other, so the best lead on the list and
-   *     an ordinary one were the same shade.
-   *
-   * Below, the closest pair is 20 apart and every one is at least 33 from the surface. They are
-   * still soft — body text measures 15:1 or better on all four, against the 4.5:1 that counts as
-   * legible — so they group rows without competing with the words on top of them.
-   *
-   * They mark a *situation*, not a verdict, so none of them is a semantic hue at strength: red here
-   * means "reviews and nothing else", which is the best call on the page rather than a warning.
+   * Four grounds that have to be told apart from each other, not merely from white — the earlier
+   * pair failed that silently, so the best lead on the list and an ordinary one were the same
+   * shade. They mark a *situation*, not a verdict, so none of them is a semantic hue at strength.
    */
-  --row-red: #fbdfe475;
-  --row-blue: #dbe8fb;
-  --row-peach: #fdeed7;
-  --row-green: #dcf2e4;
+  --row-red: #fdeaec;
+  --row-blue: #e6eefa;
+  --row-peach: #fcf1df;
+  --row-green: #e4f3e9;
 
-  --shadow-sm: 0 1px 2px rgba(19, 26, 42, 0.05);
-  --shadow: 0 1px 3px rgba(19, 26, 42, 0.07), 0 6px 16px -8px rgba(19, 26, 42, 0.12);
-  --radius: 10px;
+  /*
+   * ---- Names the rest of the product still uses ----
+   *
+   * Thirty screens were written against the previous palette's names. Aliasing them here means the
+   * redesign reaches every one of those screens, including dark mode, without thirty files being
+   * rewritten first — and a page converted later simply stops using the old name.
+   */
+  --paper: var(--app);
+  --rule: var(--line);
+  --rule-2: var(--line-2);
+  --brand: var(--accent);
+  --brand-ink: var(--accent-ink);
+  --brand-bg: var(--accent-sub);
+  --good-bg: var(--good-sub);
+  --warn-bg: var(--warn-sub);
+  --bad-bg: var(--bad-sub);
+  --info-bg: var(--info-sub);
+  /*
+   * Money is amber, not violet.
+   *
+   * The design language gives violet one meaning only — "a model wrote this" — so a price cannot
+   * borrow it without making the one signal the operator needs ambiguous. Amber already means
+   * "this costs money or needs your decision", which is exactly what a price is.
+   */
+  --money: var(--warn);
+  --money-ink: var(--warn-ink);
+  --money-bg: var(--warn-sub);
+  --social-bg: var(--social-sub);
+  --accent-bg: var(--accent-sub);
+  --radius: var(--r-lg);
+  --shadow-sm: var(--sh-1);
+  --shadow: var(--sh-2);
+}
+
+/*
+ * Dark mode, twice over.
+ *
+ * Once behind prefers-color-scheme for the viewer who never chose — guarded with
+ * :not([data-theme="light"]) so an explicit light choice still beats a dark operating system — and
+ * once behind the stamp so the toggle wins in the other direction. Every component below styles
+ * through these tokens and never inside one of these blocks, which is the only way a colour cannot
+ * end up defined in one theme and missing in the other.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --app: #09100f;
+    --panel: #0e1618;
+    --surface: #121c1f;
+    --surface-2: #172224;
+    --surface-3: #1d2a2d;
+    --hover: #192528;
+    --selected: #163038;
+
+    --ink: #e9f1f2;
+    --ink-2: #bdcdd0;
+    --ink-3: #9bb0b3;
+    --ink-4: #7c9094;
+    --inverse: #06100f;
+
+    --line: #223030;
+    --line-2: #2e3e3f;
+    --line-3: #415457;
+
+    --accent: #4fb6cc;
+    --accent-ink: #86d4e5;
+    --accent-sub: #11313a;
+    --accent-line: #1d4a56;
+    --on-accent: #06100f;
+
+    --good: #4ec98c;
+    --good-ink: #71dca6;
+    --good-sub: #0e2b1f;
+
+    --warn: #e3a257;
+    --warn-ink: #f0bd82;
+    --warn-sub: #2c2113;
+
+    --bad: #ff8d81;
+    --bad-ink: #ffa9a0;
+    --bad-sub: #301817;
+
+    --info: #6cb6e8;
+    --info-ink: #93cbf1;
+    --info-sub: #112636;
+
+    --ai: #a894ff;
+    --ai-ink: #c0b2ff;
+    --ai-sub: #1f1b3c;
+
+    --social: #e58ff0;
+    --social-ink: #efb0f6;
+    --social-sub: #2c1430;
+
+    --sh-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --sh-2: 0 12px 30px -16px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.4);
+    --sh-3: 0 30px 64px -26px rgba(0, 0, 0, 0.9), 0 6px 16px rgba(0, 0, 0, 0.5);
+
+    --row-red: #2e1719;
+    --row-blue: #14212f;
+    --row-peach: #2a2114;
+    --row-green: #122a1d;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --app: #09100f;
+  --panel: #0e1618;
+  --surface: #121c1f;
+  --surface-2: #172224;
+  --surface-3: #1d2a2d;
+  --hover: #192528;
+  --selected: #163038;
+
+  --ink: #e9f1f2;
+  --ink-2: #bdcdd0;
+  --ink-3: #9bb0b3;
+  --ink-4: #7c9094;
+  --inverse: #06100f;
+
+  --line: #223030;
+  --line-2: #2e3e3f;
+  --line-3: #415457;
+
+  --accent: #4fb6cc;
+  --accent-ink: #86d4e5;
+  --accent-sub: #11313a;
+  --accent-line: #1d4a56;
+  --on-accent: #06100f;
+
+  --good: #4ec98c;
+  --good-ink: #71dca6;
+  --good-sub: #0e2b1f;
+
+  --warn: #e3a257;
+  --warn-ink: #f0bd82;
+  --warn-sub: #2c2113;
+
+  --bad: #ff8d81;
+  --bad-ink: #ffa9a0;
+  --bad-sub: #301817;
+
+  --info: #6cb6e8;
+  --info-ink: #93cbf1;
+  --info-sub: #112636;
+
+  --ai: #a894ff;
+  --ai-ink: #c0b2ff;
+  --ai-sub: #1f1b3c;
+
+  --social: #e58ff0;
+  --social-ink: #efb0f6;
+  --social-sub: #2c1430;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --sh-2: 0 12px 30px -16px rgba(0, 0, 0, 0.8), 0 2px 6px rgba(0, 0, 0, 0.4);
+  --sh-3: 0 30px 64px -26px rgba(0, 0, 0, 0.9), 0 6px 16px rgba(0, 0, 0, 0.5);
+
+  --row-red: #2e1719;
+  --row-blue: #14212f;
+  --row-peach: #2a2114;
+  --row-green: #122a1d;
 }
 
 * {
   box-sizing: border-box;
 }
 
+/*
+ * Three faces, each with a job.
+ *
+ * Inter for the interface, Inter Tight for headings and figures — slightly narrower, so a 26px
+ * number does not shout — and JetBrains Mono wherever digits have to line up in a column: money,
+ * counts, ids. The families arrive self-hosted through next/font (see app/layout.tsx), so there is
+ * no third-party request on a cold load and no flash of the fallback.
+ */
+/* A hover message that nobody is hovering still takes up room.
+   The help text is a `position: fixed` pseudo-element, 300px wide, and on every screen in the
+   product it pushed the page 196px wider than the window — so every page had a horizontal
+   scrollbar and a band of empty paper to the right of it, for a message that was not even
+   visible. `clip` rather than `hidden` on purpose: `hidden` would make the body a scroll
+   container and break every `position: sticky` heading inside it. */
+html {
+  overflow-x: clip;
+}
+
 body {
   margin: 0;
-  background: var(--paper);
-  color: var(--ink);
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 17px;
-  line-height: 1.62;
+  overflow-x: clip;
+  background: var(--app);
+  color: var(--ink-2);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
-}
-
-a {
-  color: var(--brand);
-  text-decoration-color: color-mix(in srgb, var(--brand) 35%, transparent);
-  text-underline-offset: 2px;
-}
-
-a:hover {
-  text-decoration-color: var(--brand);
+  text-rendering: optimizeLegibility;
 }
 
 h1,
 h2,
-h3 {
-  letter-spacing: -0.012em;
+h3,
+h4 {
+  font-family: var(--font-display), var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  color: var(--ink);
+  letter-spacing: -0.015em;
+  font-weight: 600;
+  margin: 0;
+}
+
+.mono,
+code,
+kbd {
+  font-family: var(--font-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+a {
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 input,
@@ -150,347 +352,1181 @@ textarea {
   font: inherit;
 }
 
-/* ---------------------------------------------------------------- buttons */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* ---------------------------------------------------------------- buttons
+   One hierarchy, four levels, and the level says how much the button costs you:
+   primary (petrol) is the one thing this screen is for · secondary is an alternative ·
+   ghost is navigation · danger is destructive, and never primary-coloured. */
 
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
-  font-size: 16px;
-  font-weight: 650;
-  padding: 10px 17px;
-  border-radius: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 14.5px;
+  font-weight: 550;
   cursor: pointer;
-  border: 1px solid var(--brand);
-  background: var(--brand);
-  color: #fff;
+  white-space: nowrap;
   text-decoration: none;
-  transition: background 0.12s ease, border-color 0.12s ease;
+  /* A colour change, not `filter: brightness()`. A filter turns an element into the containing
+     block for any fixed-position child — which trapped every hover message inside its own
+     scrolling parent, the exact fault those messages were made fixed to escape. */
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 
-/* A colour change, not `filter: brightness()`. A filter on an element turns it into the containing
-   block for any fixed-position child — so every hover message on a button was trapped inside the
-   button's own scrolling parent and cut off, which is exactly the fault the messages were moved to
-   fixed positioning to escape. */
 .btn:hover {
-  background: var(--brand-ink);
-  border-color: var(--brand-ink);
+  background: var(--accent-ink);
+  text-decoration: none;
 }
 
+.btn svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn.secondary,
 .btn-2 {
   background: var(--surface);
+  border-color: var(--line-2);
   color: var(--ink);
-  border-color: var(--rule-2);
 }
 
+.btn.secondary:hover,
 .btn-2:hover {
-  background: var(--surface-3);
-  border-color: var(--rule-2);
+  background: var(--hover);
+  border-color: var(--line-3);
 }
 
+.btn.ghost,
 .btn-quiet {
-  background: transparent;
+  background: none;
   border-color: transparent;
   color: var(--ink-2);
 }
 
+.btn.ghost:hover,
 .btn-quiet:hover {
-  background: var(--surface-3);
-  border-color: transparent;
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.btn.danger {
+  background: var(--surface);
+  border-color: var(--line-2);
+  color: var(--bad-ink);
+}
+
+.btn.danger:hover {
+  background: var(--bad-sub);
+  border-color: var(--bad);
+}
+
+.btn.sm {
+  height: 30px;
+  padding: 0 11px;
+  font-size: 13.5px;
+}
+
+.btn.lg {
+  height: 42px;
+  padding: 0 19px;
+  font-size: 15.5px;
+}
+
+/* A button that cannot be used right now has to look it — and still be readable, because the one
+   moment its explanation matters most is while it is off. Colours, never opacity: opacity is
+   inherited by the hover message drawn from the button. */
+.btn:disabled,
+.btn[disabled] {
+  background: var(--surface-2);
+  border: 1px dashed var(--line-2);
+  color: var(--ink-4);
+  cursor: not-allowed;
+}
+
+.btn:disabled:hover,
+.btn[disabled]:hover {
+  background: var(--surface-2);
+  border-color: var(--line-2);
 }
 
 /* ---------------------------------------------------------------- forms */
 
 .field {
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 
 .field label {
   display: block;
-  font-size: 15.5px;
-  font-weight: 700;
-  margin-bottom: 7px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 6px;
 }
 
 .field input,
-.inp {
+.field select,
+.field textarea,
+.inp,
+.input {
   width: 100%;
-  padding: 10px 12px;
-  font-size: 16.5px;
-  border: 1px solid var(--rule-2);
-  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 14.5px;
+  min-height: 36px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
   background: var(--surface);
   color: var(--ink);
 }
 
+.inp::placeholder,
+.input::placeholder,
+.field input::placeholder {
+  color: var(--ink-4);
+}
+
 .field input:focus,
-.inp:focus {
-  outline: 2px solid color-mix(in srgb, var(--brand) 40%, transparent);
-  outline-offset: 1px;
-  border-color: var(--brand);
+.field select:focus,
+.field textarea:focus,
+.inp:focus,
+.input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-sub);
+}
+
+textarea.inp,
+textarea.input {
+  min-height: 84px;
+  resize: vertical;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
 }
 
 /* ---------------------------------------------------------------- app shell
-   A left rail rather than a top strip. The product has seven places to be and the top strip had
-   run out of room for them — but the real reason is orientation: a rail is always visible, always
-   in the same order, and shows where you are without being read. */
+   A left sidebar in four groups — what you work in, what you teach the system, what it has done,
+   and what it costs. Grouping is the whole point: eleven flat links is a list to search, four
+   groups of two or three is a place to know. */
 
-/*
- * The rail has two widths, and the change between them is animated.
- *
- * Closed is the default and shows icons only — 60px instead of 232px, which is most of a lead
- * column handed back to the table. Nothing becomes unreachable: every link keeps its icon and gains
- * a tooltip carrying the name, so the narrow rail is a shorthand rather than a hiding place.
- *
- * The width lives on the grid rather than on the nav so the main column moves with it in one
- * animation instead of two that can disagree.
- */
 .shell {
   display: grid;
-  grid-template-columns: var(--rail-w, 232px) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   min-height: 100vh;
   transition: grid-template-columns 0.22s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .shell[data-rail="closed"] {
-  --rail-w: 60px;
-}
-
-/* Words fade and slide out of the way; icons stay put. Animating opacity and transform rather than
-   display, because display cannot be transitioned and a label that vanishes on the first frame
-   makes the whole movement look like a jump. */
-.rail-word {
-  transition:
-    opacity 0.16s ease,
-    transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-  white-space: nowrap;
-}
-
-.shell[data-rail="closed"] .rail-word {
-  opacity: 0;
-  transform: translateX(-6px);
-  pointer-events: none;
-}
-
-/* Groups are headings for words that are no longer there. */
-.shell[data-rail="closed"] .rail-group {
-  opacity: 0;
-  height: 0;
-  padding: 0;
-  overflow: hidden;
-  transition: all 0.22s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.rail-top {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.rail-toggle {
-  border: 1px solid var(--rule-2);
-  background: var(--surface);
-  color: var(--ink-2);
-  border-radius: 7px;
-  cursor: pointer;
-  font-size: 15px;
-  line-height: 1;
-  padding: 5px 8px;
-  transition: background 0.12s ease;
-}
-
-.rail-toggle:hover {
-  background: var(--surface-3);
-  color: var(--ink);
-}
-
-.shell[data-rail="closed"] .rail-top {
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Nothing should animate for someone who has asked the operating system not to. */
-@media (prefers-reduced-motion: reduce) {
-  .shell,
-  .rail-word,
-  .rail-group {
-    transition: none;
-  }
+  --sidebar-w: 68px;
 }
 
 .rail {
-  background: var(--surface);
-  border-right: 1px solid var(--rule);
-  padding: 16px 12px 16px;
-  overflow-x: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
   position: sticky;
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
 }
 
+/* The mark, not a logo: a petrol tile with the product's initial. It is the one place in the
+   product allowed a gradient, and it earns it by being 30px wide. */
 .rail-brand {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 4px 6px 10px;
-  flex: 1;
-  min-width: 0;
-  font-weight: 800;
-  font-size: 18px;
-  color: var(--ink);
+  gap: 10px;
+  padding: 6px 8px 14px;
   text-decoration: none;
-  letter-spacing: -0.02em;
+  min-width: 0;
+}
+
+.rail-brand:hover {
+  text-decoration: none;
+}
+
+.brand-logo {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 8px;
+  background: linear-gradient(145deg, var(--accent), var(--accent-ink));
+  color: var(--on-accent);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.brand-name {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 15.5px;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.brand-sub {
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.3;
 }
 
 .rail-group {
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-2);
-  padding: 15px 10px 6px;
+  color: var(--ink-4);
+  padding: 14px 10px 5px;
 }
 
 .rail-link {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 8px 10px;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 550;
-  color: var(--ink);
+  border-radius: var(--r-sm);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 14.5px;
+  font-weight: 450;
+  text-align: left;
   text-decoration: none;
   line-height: 1.35;
 }
 
 .rail-link:hover {
-  background: var(--surface-3);
+  background: var(--hover);
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .rail-link[data-active="true"] {
-  background: var(--brand-bg);
-  color: var(--brand-ink);
-  font-weight: 650;
+  background: var(--selected);
+  color: var(--accent-ink);
+  font-weight: 600;
 }
 
 .rail-icon {
-  width: 22px;
-  text-align: center;
-  font-size: 16.5px;
-  flex: 0 0 22px;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
 }
+
+.rail-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.rail-count {
+  margin-left: auto;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-style: normal;
+  color: var(--ink-3);
+}
+
+.rail-foot {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+}
+
+.userchip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  min-width: 0;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Narrow: icons only, every name on hover. Words fade and slide; icons stay put. Animating
+   opacity and transform rather than display, because display cannot be transitioned and a label
+   that vanishes on the first frame makes the whole movement look like a jump. */
+.rail-word {
+  transition: opacity 0.16s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.shell[data-rail="closed"] .rail-word,
+.shell[data-rail="closed"] .rail-count {
+  opacity: 0;
+  transform: translateX(-6px);
+  pointer-events: none;
+  width: 0;
+}
+
+.shell[data-rail="closed"] .rail-group {
+  opacity: 0;
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.shell[data-rail="closed"] .rail-link,
+.shell[data-rail="closed"] .rail-brand,
+.shell[data-rail="closed"] .userchip {
+  justify-content: center;
+  gap: 0;
+}
+
+/* ---------------------------------------------------------------- topbar
+   Where you are, what you are looking for, what it has cost, and the two switches. The spend chip
+   is in the frame on every screen on purpose: this product spends the operator's money, and a
+   total that lives on one page is a total nobody sees. */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  min-height: var(--topbar-h);
+  background: color-mix(in srgb, var(--app) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 22px;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: var(--ink-3);
+  min-width: 0;
+}
+
+.crumbs b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.crumbs a {
+  color: var(--ink-3);
+}
+
+.topsearch {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(300px, 32vw);
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
+  padding: 0 10px;
+  height: 34px;
+}
+
+.topsearch svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  stroke: var(--ink-4);
+  fill: none;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.topsearch input {
+  border: 0;
+  background: none;
+  outline: none;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+}
+
+.iconbtn {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+  position: relative;
+  text-decoration: none;
+}
+
+.iconbtn:hover {
+  background: var(--hover);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.iconbtn svg {
+  width: 17px;
+  height: 17px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.iconbtn .dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--app);
+}
+
+.spendchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  flex: none;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.spendchip:hover {
+  background: var(--hover);
+  text-decoration: none;
+}
+
+.spendchip b {
+  font-family: var(--font-mono), monospace;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------- page frame */
 
 .shell-main {
   min-width: 0;
   padding: 0 0 72px;
 }
 
-.topbar {
+.page-head {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 30px;
-  border-bottom: 1px solid var(--rule);
-  background: var(--surface);
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
 }
 
-@media (max-width: 900px) {
-  .shell {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .rail {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    flex-wrap: wrap;
-    border-right: 0;
-    border-bottom: 1px solid var(--rule);
-  }
-  .rail-group {
-    display: none;
-  }
-  .topbar {
-    padding: 12px 18px;
-  }
+.page-head h1 {
+  font-size: 24px;
+  line-height: 1.2;
 }
 
-/* ---------------------------------------------------------------- cards */
+.page-head p {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: 14px;
+  max-width: 68ch;
+}
+
+.page-head .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin: 26px 0 10px;
+}
+
+.section-head h2 {
+  font-size: 16.5px;
+}
+
+.section-head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.section-head .more {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------------- surfaces */
 
 .card {
   background: var(--surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
+}
+
+.card.pad {
+  padding: 16px 18px;
 }
 
 .card-head {
-  padding: 14px 18px 12px;
-  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.card-head h3 {
+  font-size: 15px;
+}
+
+.card-head .right {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 /* A coloured top edge, so a card's purpose is visible before its heading is read. */
 .card[data-tone="brand"] {
-  box-shadow: inset 0 3px 0 0 var(--brand), var(--shadow-sm);
+  box-shadow: inset 0 3px 0 0 var(--accent), var(--sh-1);
 }
 .card[data-tone="good"] {
-  box-shadow: inset 0 3px 0 0 var(--good), var(--shadow-sm);
+  box-shadow: inset 0 3px 0 0 var(--good), var(--sh-1);
 }
 .card[data-tone="warn"] {
-  box-shadow: inset 0 3px 0 0 var(--warn), var(--shadow-sm);
+  box-shadow: inset 0 3px 0 0 var(--warn), var(--sh-1);
 }
 .card[data-tone="bad"] {
-  box-shadow: inset 0 3px 0 0 var(--bad), var(--shadow-sm);
+  box-shadow: inset 0 3px 0 0 var(--bad), var(--sh-1);
 }
 .card[data-tone="info"] {
-  box-shadow: inset 0 3px 0 0 var(--info), var(--shadow-sm);
+  box-shadow: inset 0 3px 0 0 var(--info), var(--sh-1);
 }
 .card[data-tone="money"] {
-  box-shadow: inset 0 3px 0 0 var(--money), var(--shadow-sm);
+  box-shadow: inset 0 3px 0 0 var(--money), var(--sh-1);
+}
+.card[data-tone="ai"] {
+  box-shadow: inset 0 3px 0 0 var(--ai), var(--sh-1);
 }
 .card[data-tone="social"] {
-  box-shadow: inset 0 3px 0 0 var(--social), var(--shadow-sm);
+  box-shadow: inset 0 3px 0 0 var(--social), var(--sh-1);
+}
+
+.grid {
+  display: grid;
+  gap: 14px;
+}
+.g-2 {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+.g-3 {
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+.g-4 {
+  grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* ---------------------------------------------------------------- data bits */
+
+.kpi {
+  padding: 15px 17px;
+  display: grid;
+  gap: 3px;
+}
+
+.kpi .label {
+  font-size: 13px;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kpi .val {
+  font-family: var(--font-display), sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.kpi .meta {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.trend {
+  font-size: 12.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.trend.up {
+  color: var(--good-ink);
+}
+.trend.down {
+  color: var(--bad-ink);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--r-pill);
+  font-size: 12.5px;
+  font-weight: 550;
+  white-space: nowrap;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  border: 1px solid var(--line);
+}
+.badge.good {
+  background: var(--good-sub);
+  color: var(--good-ink);
+  border-color: transparent;
+}
+.badge.warn {
+  background: var(--warn-sub);
+  color: var(--warn-ink);
+  border-color: transparent;
+}
+.badge.bad {
+  background: var(--bad-sub);
+  color: var(--bad-ink);
+  border-color: transparent;
+}
+.badge.ai {
+  background: var(--ai-sub);
+  color: var(--ai-ink);
+  border-color: transparent;
+}
+.badge.accent {
+  background: var(--accent-sub);
+  color: var(--accent-ink);
+  border-color: transparent;
+}
+.badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* The priority square. Monospaced, because it is a number used as a label. */
+.pri {
+  display: inline-grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  border-radius: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.pri.p1 {
+  background: var(--bad-sub);
+  color: var(--bad-ink);
+}
+.pri.p2 {
+  background: var(--warn-sub);
+  color: var(--warn-ink);
+}
+.pri.p3 {
+  background: var(--accent-sub);
+  color: var(--accent-ink);
+}
+.pri.p4 {
+  background: var(--surface-2);
+  color: var(--ink-3);
+}
+
+.meter {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.meter i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--accent);
+}
+.meter.good i {
+  background: var(--good);
+}
+.meter.warn i {
+  background: var(--warn);
+}
+.meter.bad i {
+  background: var(--bad);
+}
+
+/* Where a fact came from. A dot and 12px grey, so five sources of very different reliability stop
+   looking equally trustworthy. */
+.src {
+  font-size: 12px;
+  color: var(--ink-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.src::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line-3);
+  flex: none;
 }
 
 /* ---------------------------------------------------------------- tables */
 
-.tbl {
+.tablewrap {
+  overflow-x: auto;
+}
+
+.tbl,
+table.data {
   width: 100%;
   border-collapse: collapse;
+  font-size: 14.5px;
 }
 
-.tbl thead th {
+.tbl thead th,
+table.data thead th {
   background: var(--surface-2);
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   text-align: left;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--rule);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line-2);
   vertical-align: top;
 }
 
-.tbl tbody tr:hover {
-  background: var(--surface-2);
+.tbl td,
+table.data td {
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink-2);
+  vertical-align: top;
 }
 
-.tbl td {
-  padding: 13px 14px;
-  border-bottom: 1px solid var(--rule);
-  font-size: 15.5px;
+.tbl tbody tr:hover,
+table.data tbody tr:hover td {
+  background: var(--hover);
+}
+
+table.data tbody tr[data-sel="1"] td {
+  background: var(--selected);
+}
+
+.tbl td.num,
+.tbl th.num,
+table.data td.num,
+table.data th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The business cell: name, then where it is, then what it is. One shape, learned once. */
+.biz {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.biz b {
+  font-weight: 600;
   color: var(--ink);
-  vertical-align: top;
+  font-size: 14.5px;
+}
+
+.biz span {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+/* ---------------------------------------------------------------- chips, segments, tabs */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: center;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 7px 0 11px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-sub);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.chip:hover {
+  text-decoration: none;
+  border-color: var(--accent);
+}
+
+.seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+
+.seg a,
+.seg button {
+  border: 0;
+  background: none;
+  padding: 5px 12px;
+  border-radius: 5px;
+  font-size: 13px;
+  color: var(--ink-2);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.seg a[aria-pressed="true"],
+.seg button[aria-pressed="true"],
+.seg a[aria-current="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: var(--sh-1);
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.tabs a,
+.tabs button {
+  border: 0;
+  background: none;
+  padding: 10px 14px;
+  font-size: 14.5px;
+  color: var(--ink-3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  text-decoration: none;
+}
+
+.tabs a:hover,
+.tabs button:hover {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.tabs a[aria-selected="true"],
+.tabs button[aria-selected="true"] {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- notes
+   A note explains; it never reports a number. The left edge carries the meaning, and `ai` is the
+   one the operator has to be able to spot without reading: violet means a model wrote it. */
+
+.note {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r);
+  padding: 13px 15px;
+  background: var(--surface);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+
+.note h4 {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.note.ai {
+  border-left-color: var(--ai);
+  background: var(--ai-sub);
+}
+.note.warn {
+  border-left-color: var(--warn);
+  background: var(--warn-sub);
+}
+.note.bad {
+  border-left-color: var(--bad);
+  background: var(--bad-sub);
+}
+.note.good {
+  border-left-color: var(--good);
+  background: var(--good-sub);
+}
+
+.list {
+  display: grid;
+}
+
+.list > * {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.list > *:last-child {
+  border-bottom: 0;
+}
+
+.timeline {
+  display: grid;
+}
+
+.tl {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 12px;
+  padding: 0 0 16px;
+  position: relative;
+}
+
+.tl::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 24px;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+
+.tl:last-child::before {
+  display: none;
+}
+
+.tl .ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.tl b {
+  display: block;
+  color: var(--ink);
+  font-size: 14.5px;
+  font-weight: 550;
+}
+
+.tl span {
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+/* ---------------------------------------------------------------- progress, empty, skeleton */
+
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.steps .s {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-3);
+}
+
+.steps .s i {
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-style: normal;
+  font-size: 11.5px;
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+}
+
+.steps .s[data-state="done"] i {
+  background: var(--good-sub);
+  color: var(--good-ink);
+  border-color: transparent;
+}
+
+.steps .s[data-state="now"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.steps .s[data-state="now"] i {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+.steps .sep {
+  width: 18px;
+  height: 1px;
+  background: var(--line-2);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%);
+  background-size: 200% 100%;
+  animation: sk 1.3s linear infinite;
+  border-radius: var(--r-sm);
+}
+
+@keyframes sk {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* An empty screen says why it is empty and offers the one thing that fills it. Never a shrug. */
+.empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 48px 20px;
+}
+
+.empty .art {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: var(--accent-sub);
+  color: var(--accent-ink);
+  display: grid;
+  place-items: center;
+}
+
+.empty h3 {
+  font-size: 17px;
+}
+
+.empty p {
+  margin: 0;
+  max-width: 46ch;
+  color: var(--ink-3);
+  font-size: 14px;
 }
 
 /* ---------------------------------------------------------------- work layout
-   Below 1100px the filter sidebar stops being a sidebar and sits above the list, because a 240px
-   column beside a table with a 1290px minimum turns both into something you scroll sideways to
-   read. The sticky column gets its own scrollbar: six filter sections are taller than a laptop
-   viewport, and a sticky element taller than the screen simply hides its own end. */
+   Below 1100px the filter column stops being a column, because 272px beside a table with a
+   1290px minimum turns both into something you scroll sideways to read. The sticky column gets
+   its own scrollbar: six filter sections are taller than a laptop viewport, and a sticky element
+   taller than the screen simply hides its own end. */
 
 .work-layout {
   display: grid;
@@ -523,14 +1559,11 @@ textarea {
    `data-tip` attribute and is drawn by a pseudo-element.
 
    **Fixed, not absolute — and that is the whole fix.** The first version positioned the message
-   absolutely, and it was cut in half everywhere it mattered: the filter sidebar and the leads table
-   both scroll, and a scrolling container clips anything that pokes out of it. The operator saw half
-   a sentence and reported it as unreadable, which it was.
-
-   A `position: fixed` box with no offsets stays where it would naturally sit, but is laid out
-   against the window rather than its scrolling parent, so nothing clips it. It is then lifted above
-   its element with a transform, which needs no knowledge of how tall the element is. Shown above
-   rather than below because below is where the next row of filters, or the table, already is. */
+   absolutely and it was cut in half everywhere it mattered: the filter column and the leads table
+   both scroll, and a scrolling container clips anything that pokes out of it. The operator saw
+   half a sentence and reported it as unreadable, which it was. A `position: fixed` box with no
+   offsets stays where it would naturally sit but is laid out against the window, so nothing clips
+   it; a transform then lifts it above its element without needing to know how tall that is. */
 
 [data-tip] {
   position: relative;
@@ -542,33 +1575,28 @@ textarea {
   z-index: 1000;
   width: max-content;
   max-width: 300px;
-  /* A light card rather than a black slab: the operator could not read white text on near-black
-     at this size, and a message about a button should look like part of the page, not an alarm.
-     The blue edge says "this explains something"; a switched-off button turns it amber. */
+  /* A light card rather than a black slab: the operator could not read white-on-near-black at this
+     size, and a message about a button should look like part of the page, not an alarm. The petrol
+     edge says "this explains something"; a switched-off control turns it amber. */
   padding: 12px 15px 12px 14px;
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1.5px solid var(--rule);
-  border-left: 5px solid var(--brand);
+  border-radius: var(--r);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-left: 4px solid var(--accent);
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.55;
+  font-size: 14px;
+  font-weight: 450;
+  line-height: 1.5;
   letter-spacing: 0;
   text-transform: none;
   text-align: left;
   white-space: normal;
-  box-shadow:
-    0 16px 36px -12px rgba(16, 20, 28, 0.35),
-    0 2px 6px rgba(16, 20, 28, 0.08);
+  box-shadow: var(--sh-3);
   pointer-events: none;
   opacity: 0;
   visibility: hidden;
   transform: translateY(calc(-100% - 6px));
-  transition:
-    opacity 0.16s ease,
-    transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-    visibility 0s linear 0.18s;
+  transition: opacity 0.16s ease, transform 0.18s cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0.18s;
 }
 
 [data-tip]:hover::after,
@@ -576,17 +1604,16 @@ textarea {
   opacity: 1;
   visibility: visible;
   transform: translateY(calc(-100% - 10px));
-  /* A short wait, so a cursor passing over a row of buttons does not flash five messages. */
+  /* A short wait, so a cursor crossing a row of buttons does not flash five messages. */
   transition:
     opacity 0.16s ease 0.25s,
     transform 0.18s cubic-bezier(0.4, 0, 0.2, 1) 0.25s,
     visibility 0s linear 0.25s;
 }
 
-/* Toolbar buttons sit near the top of the screen, where "above" would put the message off it, and
-   usually at the right edge, where it would run off the side. So these open below and leftwards.
-   The offset was measured on rendered buttons, not guessed: the message's natural position sits a
-   little above the button, and 74px clears both the full-size and the compact button below it. */
+/* Toolbar controls sit near the top of the screen, where "above" would put the message off it, and
+   usually at the right edge, where it would run off the side. These open below and leftwards; the
+   offset was measured on rendered buttons, not guessed. */
 .tip-right[data-tip]::after {
   transform: translate(calc(-100% + 60px), 66px);
 }
@@ -595,11 +1622,10 @@ textarea {
   transform: translate(calc(-100% + 60px), 74px);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  [data-tip]::after,
-  [data-tip]:hover::after {
-    transition: opacity 0.01s, visibility 0s;
-  }
+/* A switched-off control's message is a reason, not a description: amber edge instead of petrol. */
+[data-tip]:disabled::after,
+.fmenu-off[data-tip]::after {
+  border-left-color: var(--warn);
 }
 
 /* ---------------------------------------------------------------------------
@@ -607,12 +1633,11 @@ textarea {
 
    The operator's report was that the screen was confusing in two specific ways: the filters were a
    column of their own down the left, and the buttons that act on the list were scattered across
-   the top in three groups with no order to them. So the page now reads 1, 2, 3 — choose, tick,
-   act — and each filter is a menu rather than a permanently open section.
+   the top in three groups with no order to them. So the page reads 1, 2, 3 — choose, tick, act —
+   and each filter is a menu rather than a permanently open section.
 
-   `<details>` is the whole mechanism. It opens and closes with no JavaScript, keeps the page's
-   layout still while it is open (the panel is absolutely positioned), and closes on Escape in
-   every browser that supports it.
+   `<details>` is the whole mechanism. It opens and closes with no JavaScript, keeps the layout
+   still while open (the panel is absolutely positioned), and closes on Escape.
    --------------------------------------------------------------------------- */
 
 .fmenu {
@@ -625,11 +1650,13 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 12px;
-  border: 1.5px solid var(--rule);
-  border-radius: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-sm);
   background: var(--surface);
-  font-size: 15px;
+  color: var(--ink);
+  font-size: 13.5px;
   white-space: nowrap;
   user-select: none;
 }
@@ -641,21 +1668,22 @@ textarea {
 .fmenu > summary::after {
   content: "▾";
   color: var(--ink-3);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .fmenu[open] > summary,
 .fmenu > summary:hover {
-  border-color: var(--ink);
+  border-color: var(--line-3);
+  background: var(--hover);
 }
 
 /* A menu whose filter is on says so on its face, so the chips below are a summary rather than the
    only place the state lives. */
 .fmenu > summary[data-on="1"] {
-  border-color: var(--ink);
-  border-width: 2px;
-  font-weight: 700;
-  background: var(--surface-2);
+  border-color: var(--accent);
+  background: var(--accent-sub);
+  color: var(--accent-ink);
+  font-weight: 600;
 }
 
 .fmenu[open] > summary::after {
@@ -671,10 +1699,10 @@ textarea {
   max-width: 380px;
   max-height: 60vh;
   overflow-y: auto;
-  background: var(--paper);
-  border: 2px solid var(--ink);
-  border-radius: 10px;
-  box-shadow: 0 16px 40px -12px rgba(16, 20, 28, 0.4);
+  background: var(--panel);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-3);
 }
 
 /* Near the right edge a menu would open off the screen; these open leftwards instead. */
@@ -689,20 +1717,21 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 8px 12px;
-  border: 1.5px dashed var(--rule-2);
-  border-radius: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px dashed var(--line-2);
+  border-radius: var(--r-sm);
   background: var(--surface-2);
-  color: var(--ink-3);
-  font-size: 15px;
+  color: var(--ink-4);
+  font-size: 13.5px;
   white-space: nowrap;
   cursor: help;
 }
 
 .fmenu-off b {
-  font-size: 12.5px;
+  font-size: 11.5px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
 }
 
 /* The chips: every choice that is on, each one removable on its own. */
@@ -710,20 +1739,23 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 5px 11px;
-  border: 1.5px solid var(--ink);
-  border-radius: 999px;
-  background: var(--surface-2);
-  font-size: 14.5px;
-  font-weight: 650;
+  height: 28px;
+  padding: 0 11px;
+  border: 1px solid var(--accent-line);
+  border-radius: var(--r-pill);
+  background: var(--accent-sub);
+  font-size: 13px;
+  font-weight: 550;
   text-decoration: none;
-  color: var(--ink);
+  color: var(--accent-ink);
   white-space: nowrap;
 }
 
 .fchip:hover {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  text-decoration: none;
 }
 
 .step-head {
@@ -737,13 +1769,14 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 25px;
+  height: 25px;
   border-radius: 7px;
-  background: var(--ink);
-  color: var(--paper);
-  font-size: 15px;
-  font-weight: 800;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-family: var(--font-mono), monospace;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 /* Step 3 follows the operator down the page: with a long list, the buttons that act on it should
@@ -752,15 +1785,263 @@ textarea {
   position: sticky;
   bottom: 12px;
   z-index: 30;
-  border: 2px solid var(--ink);
-  border-radius: 10px;
-  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-lg);
+  background: var(--panel);
   padding: 13px 16px;
   display: flex;
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  box-shadow: 0 10px 30px -12px rgba(16, 20, 28, 0.35);
+  box-shadow: var(--sh-3);
+}
+
+/* The contextual bar that appears only once rows are ticked. Dark, so it reads as a layer over the
+   list rather than another row in it. */
+.bulkbar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 30;
+  margin: 14px auto 0;
+  width: fit-content;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px 9px 16px;
+  background: var(--ink);
+  border-radius: var(--r-pill);
+  box-shadow: var(--sh-3);
+  color: var(--app);
+}
+
+.bulkbar b {
+  color: var(--app);
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
+.bulkbar .btn {
+  height: 30px;
+}
+
+.bulkbar .btn.secondary,
+.bulkbar .btn-2 {
+  background: color-mix(in srgb, var(--app) 14%, transparent);
+  border-color: color-mix(in srgb, var(--app) 28%, transparent);
+  color: var(--app);
+}
+
+.bulkbar .btn.secondary:hover,
+.bulkbar .btn-2:hover {
+  background: color-mix(in srgb, var(--app) 24%, transparent);
+  border-color: color-mix(in srgb, var(--app) 40%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+   "That finished" — five seconds, then gone, with no JavaScript.
+
+   The whole mechanism is one animation. It slides in, waits, and fades out with `forwards`, so the
+   final frame — transparent and `pointer-events: none` — is where it stays for good. Nothing has
+   to remember to take it away, and nothing is left behind to catch a click.
+
+   `visibility` is animated alongside opacity so the box also leaves the accessibility tree rather
+   than sitting invisibly over the page for a screen reader to find.
+   --------------------------------------------------------------------------- */
+
+.toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 90;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 380px;
+  padding: 13px 15px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--good);
+  border-radius: var(--r);
+  box-shadow: var(--sh-3);
+  color: var(--ink-2);
+}
+
+.toast[data-tone="bad"] {
+  border-left-color: var(--bad);
+}
+
+.toast[data-tone="bad"] > span[aria-hidden] {
+  color: var(--bad-ink);
+}
+
+.toast > span[aria-hidden] {
+  color: var(--good-ink);
+  font-weight: 700;
+}
+
+.toast b {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.toast span {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.toast.auto {
+  animation: toast-in 0.22s cubic-bezier(0.4, 0, 0.2, 1), toast-out 0.4s ease 5s forwards;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    pointer-events: none;
+  }
+}
+
+/* Someone who has asked for no motion still gets the message, and still gets it taken away —
+   it simply appears and disappears instead of sliding. */
+@media (prefers-reduced-motion: reduce) {
+  .toast.auto {
+    animation: toast-out 0.01s linear 5s forwards !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .toast {
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    max-width: none;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   The filter drawer.
+
+   Eleven filters in one panel that slides in from the right, rather than eleven dropdowns along a
+   bar. The bar was honest about state and wrong about shape: only one menu could be open at a
+   time, and the row wrapped onto three lines on a laptop.
+
+   It is open when the address says `?filters=1`, so there is no state here to keep in sync and
+   nothing to script. The scrim is a link — clicking anywhere outside closes it.
+   --------------------------------------------------------------------------- */
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(8, 20, 22, 0.42);
+  /* A link covering the screen: it has no text, and a screen reader is told what it does by its
+     aria-label rather than by its (empty) contents. */
+  display: block;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 70;
+  width: min(480px, 100%);
+  background: var(--panel);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--sh-3);
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.drawer header h3 {
+  font-size: 16.5px;
+}
+
+.drawer header p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+
+.drawer .body {
+  padding: 4px 18px 18px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.drawer footer {
+  padding: 13px 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  background: var(--surface);
+}
+
+.drawer footer .spacer {
+  margin-left: auto;
+}
+
+/* One filter inside the drawer: its name, what is chosen, and its options under it. */
+.fgroup {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.fgroup:last-child {
+  border-bottom: 0;
+}
+
+/* A group with something chosen in it carries a petrol edge, so a long panel can be scanned for
+   what is on without reading every option. */
+.fgroup[data-on="1"] {
+  border-left: 3px solid var(--accent);
+  margin-left: -12px;
+  padding-left: 9px;
+}
+
+/* FilterSection draws its own frame for the old sidebar; inside a drawer group it is the body. */
+.fgroup > div {
+  border-bottom: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* The two filters that exist and cannot be used sit together at the end of the panel. */
+.drawer .fmenu-off {
+  height: auto;
+  padding: 10px 12px;
+  white-space: normal;
+  display: flex;
+}
+
+@media (max-width: 640px) {
+  .drawer {
+    width: 100%;
+    top: auto;
+    height: 88vh;
+    border-left: 0;
+    border-top-left-radius: var(--r-lg);
+    border-top-right-radius: var(--r-lg);
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -781,8 +2062,9 @@ textarea {
   gap: 14px;
   padding: 16px 18px;
   background: var(--surface);
-  border: 1.5px solid var(--rule);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-1);
 }
 
 /* The arrow between two stages: it is a pipeline, so it reads left to right. */
@@ -797,8 +2079,8 @@ textarea {
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  color: var(--ink-3);
-  background: var(--paper);
+  color: var(--ink-4);
+  background: var(--app);
   border-radius: 999px;
 }
 
@@ -807,9 +2089,9 @@ textarea {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 0;
-  font-size: 15px;
+  font-size: 14px;
   text-decoration: none;
-  border-bottom: 1px solid var(--rule-2);
+  border-bottom: 1px solid var(--line);
 }
 
 .dash-line:hover span {
@@ -841,9 +2123,9 @@ textarea {
 
 .dash-track {
   display: block;
-  height: 7px;
+  height: 6px;
   border-radius: 99px;
-  background: var(--rule-2);
+  background: var(--surface-3);
   overflow: hidden;
 }
 
@@ -851,7 +2133,7 @@ textarea {
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: var(--brand);
+  background: var(--accent);
 }
 
 .dash-cost {
@@ -859,27 +2141,6 @@ textarea {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
   gap: 14px;
   align-items: start;
-}
-
-@media (max-width: 1100px) {
-  .dash-stages,
-  .dash-breakdowns {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .dash-stage:nth-child(odd)::before {
-    display: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .dash-stages,
-  .dash-breakdowns,
-  .dash-cost {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .dash-stage::before {
-    display: none;
-  }
 }
 
 /* NextAction carries its own minimum width for the flex rows it is used in elsewhere. Inside this
@@ -900,67 +2161,226 @@ textarea {
 .menu-item {
   display: grid;
   gap: 1px;
-  padding: 9px 11px;
-  border-radius: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
   text-decoration: none;
   color: var(--ink);
+  font-size: 14px;
 }
 
 .menu-item span {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--ink-3);
 }
 
 .menu-item:hover {
-  background: var(--surface-2);
-}
-
-/* The header menu's summary is already a button; it does not need the filter chevron twice. */
-.fmenu > summary.btn::after {
-  color: inherit;
+  background: var(--hover);
+  text-decoration: none;
 }
 
 /* A menu whose summary is a primary button keeps the button's own colours; the filter-menu rules
    above would otherwise paint it white on white. */
 .fmenu > summary.btn {
-  background: var(--brand);
-  border: 1px solid var(--brand);
-  color: #fff;
-  font-weight: 650;
-  font-size: 16px;
-  padding: 10px 17px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--on-accent);
+  font-weight: 550;
+  font-size: 14.5px;
+  height: 36px;
+  padding: 0 14px;
+}
+
+.fmenu > summary.btn::after {
+  color: inherit;
 }
 
 .fmenu > summary.btn:hover,
 .fmenu[open] > summary.btn {
-  background: var(--brand-ink);
-  border-color: var(--brand-ink);
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
 }
 
-/* A button that cannot be used right now has to look it — the panel says "switched off", and a
-   button that looks pressable while doing nothing is the confusing kind of wrong. */
-.btn:disabled,
-.btn[disabled] {
-  /* Colours, not opacity. Opacity is inherited by the hover message drawn from the button, so a
-     faded button had a faded explanation — the one moment the explanation matters most. */
-  background: var(--surface-2);
-  border: 1.5px dashed var(--rule-2);
-  color: var(--ink-3);
-  cursor: not-allowed;
+/* ---------------------------------------------------------------- responsive */
+
+@media (max-width: 1100px) {
+  .dash-stages,
+  .dash-breakdowns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-stage:nth-child(odd)::before {
+    display: none;
+  }
 }
 
-.btn:disabled:hover,
-.btn[disabled]:hover {
-  background: var(--surface-2);
-  border-color: var(--rule-2);
+@media (max-width: 1080px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-/* A switched-off button's message is a reason, not a description: amber edge instead of blue. */
-[data-tip]:disabled::after {
-  border-left-color: var(--warn);
+/* The leads list as cards: defined here, switched on inside the phone block below. These must
+   come BEFORE that block — a later rule of equal specificity wins over one inside a media query,
+   and with the order the other way round the table was hidden on a phone and the cards were
+   hidden too, so the list disappeared completely. */
+.leadcards {
+  display: none;
+}
+.leadcard {
+  display: grid;
+  gap: 9px;
+  padding: 13px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+}
+.leadcard-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.leadcard-foot {
+  display: flex;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
 }
 
-/* Filters that exist but are switched off (Budget, Revenue) explain a reason too. */
-.fmenu-off[data-tip]::after {
-  border-left-color: var(--warn);
+/* ---------------------------------------------------------------- a phone
+   The sidebar is a desk thing. On a phone it became a wrapping row of unlabelled icons whose
+   foot — the account, and Sign out — was hidden, so there was no way to sign out at all. Below
+   900px the sidebar goes entirely and the bottom bar takes over. */
+.bottombar {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rail {
+    display: none;
+  }
+  .topbar {
+    padding: 8px 14px;
+  }
+  .topsearch {
+    display: none;
+  }
+  /* room for the bar, plus whatever the phone itself reserves at the bottom */
+  .shell-main > main {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom)) !important;
+  }
+
+  .bottombar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bottombar > a,
+  .morebar > summary {
+    display: grid;
+    justify-items: center;
+    gap: 3px;
+    padding: 8px 2px 7px;
+    font-size: 11px;
+    color: var(--ink-2);
+    text-decoration: none;
+    list-style: none;
+    cursor: pointer;
+  }
+  .morebar > summary::-webkit-details-marker {
+    display: none;
+  }
+  .bottombar > a[data-active="true"],
+  .morebar[open] > summary {
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+
+  /* The sheet. Fixed to the window rather than to the bar, so it is never clipped by it. */
+  .moresheet {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(62px + env(safe-area-inset-bottom));
+    max-height: 62vh;
+    overflow-y: auto;
+    background: var(--panel);
+    border-top: 1px solid var(--line);
+    box-shadow: var(--sh-3);
+  }
+  .moresheet-in {
+    display: grid;
+    padding: 6px;
+  }
+  .moresheet-in a,
+  .moresheet-in button {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    width: 100%;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    font: inherit;
+    font-size: 15px;
+    text-align: left;
+    color: var(--ink);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .moresheet-in a[data-active="true"] {
+    background: var(--selected);
+    color: var(--accent-ink);
+    font-weight: 600;
+  }
+
+  /* The leads list stops being a table and becomes one card per lead. */
+  .leadtable {
+    display: none;
+  }
+  .leadcards {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+  }
+}
+
+
+
+@media (max-width: 640px) {
+  .dash-stages,
+  .dash-breakdowns,
+  .dash-cost {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .dash-stage::before {
+    display: none;
+  }
+  .grid.g-4,
+  .grid.g-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .kpi .val {
+    font-size: 23px;
+  }
+  .page-head .actions {
+    width: 100%;
+  }
+}
+
+/* Nothing should animate for someone who has asked the operating system not to. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
 }

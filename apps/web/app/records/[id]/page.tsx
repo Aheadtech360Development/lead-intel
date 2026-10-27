@@ -1,4 +1,4 @@
-import { PAGE_TYPE_LABELS, buildOpeners, type CheckResult } from "@lead-intel/core";
+import { PAGE_TYPE_LABELS, buildOpeners, checkedness, type CheckResult } from "@lead-intel/core";
 import { BUSINESS_ORIGIN_LABELS, type BusinessOrigin } from "@lead-intel/shared";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,6 +7,7 @@ import { loadScorecards } from "@/lib/page-scorecards";
 import { auditWebsite, fullAnalyse } from "./audit-actions";
 import { analyseUnscored } from "../analyse-actions";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer, leadScope } from "@/lib/viewer";
 import { explainBusiness } from "./explain-actions";
 import { saveInstagramUrl } from "./social-actions";
 import {
@@ -125,7 +126,7 @@ export default async function RecordDetailPage({
    * One business, in four tabs.
    *
    * Everything here used to be one very long page: who they are, everything known about them,
-   * every page of their website, every one of the 51 checks, the call log and every job ever run.
+   * every page of their website, every one of the 64 checks, the call log and every job ever run.
    * All of it matters and none of it is wanted at the same time — the operator's report was that
    * the important things were buried.
    *
@@ -136,11 +137,21 @@ export default async function RecordDetailPage({
     message.tab === "website" || message.tab === "checks" || message.tab === "calls" ? message.tab : "overview";
   const supabase = await createClient();
 
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const claims = claimsData?.claims;
+  const viewer = await getViewer();
+  const claims = viewer ? { sub: viewer.id, email: viewer.email } : null;
 
   const { data: business } = await supabase.from("businesses").select("*").eq("id", id).maybeSingle();
   if (!business) notFound();
+
+  /**
+   * A member may open their own leads, and only their own.
+   *
+   * The list is already filtered, so this only matters when an address is typed in or a link is
+   * forwarded — which is exactly when it matters. `notFound` rather than a refusal on purpose:
+   * telling someone a record exists but is not theirs is itself a leak of the list.
+   */
+  const scope = viewer ? leadScope(viewer) : null;
+  if (scope && business[scope.column] !== scope.value) notFound();
 
   // Checklist rules are scoped by industry, and an industry now lives on the ICP the business
   // matched. A business in no ICP has none, and is judged on the universal rules alone.
@@ -163,7 +174,7 @@ export default async function RecordDetailPage({
       .order("field_name"),
     supabase
       .from("outcomes")
-      .select("channel, result, objection, notes, created_at")
+      .select("channel, result, objection, notes, created_at, meeting_date")
       .eq("business_id", id)
       .order("created_at", { ascending: false }),
     supabase
@@ -242,6 +253,15 @@ export default async function RecordDetailPage({
     verified: fieldValue("instagram_verified"),
     isPrivate: fieldValue("instagram_private"),
   };
+  /**
+   * The one thing worth doing next on this lead.
+   *
+   * The design asks for a single obvious next step, and the rule it sets is that the step must be
+   * supported by data already on the record — never a guess dressed up as advice. So this is a
+   * short ladder, read top to bottom, and every rung is a fact: nothing has been read · a call is
+   * already booked · they have been called · there is a cheap thing left to learn · nothing is
+   * left, so ring them.
+   */
   const metaAds = {
     page: fieldValue("facebook_url"),
     running: fieldValue("meta_ads_running"),
@@ -263,6 +283,65 @@ export default async function RecordDetailPage({
   const areaScores = readAreaScores(business.area_scores);
   const openerArea = business.route ? ROUTE_TO_AREA[business.route] : null;
 
+  const lastOutcome = (outcomes ?? [])[0] ?? null;
+  const bookedFor = (outcomes ?? []).map((o) => o.meeting_date).find((d): d is string => Boolean(d)) ?? null;
+  const hasListing = (keys ?? []).some((k) => k.key_type === "place_id");
+
+  const nextStep: { title: string; body: string; href: string; label: string; cost: string | null } = (() => {
+    if (!business.scored_at) {
+      return {
+        title: "Nobody has looked at this one yet",
+        body: "No check has run against it, so it has no score — which is not the same as a low one. Reading their website takes about fifteen seconds and costs nothing.",
+        href: `/records/${id}?tab=checks`,
+        label: "See what is missing",
+        cost: null,
+      };
+    }
+    if (bookedFor) {
+      return {
+        title: `You are due back on ${new Date(bookedFor).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" })}`,
+        body: "A date was set when you logged the call. Open the history to see exactly what was said before you ring again.",
+        href: `/records/${id}?tab=calls`,
+        label: "Read the call",
+        cost: null,
+      };
+    }
+    if (lastOutcome) {
+      return {
+        title: "You have spoken to this business",
+        body: "Everything said is on the Calls tab. Log the next attempt from there — it is what teaches the product which openers actually get answered.",
+        href: `/records/${id}?tab=calls`,
+        label: "Log another call",
+        cost: null,
+      };
+    }
+    if (!hasListing) {
+      return {
+        title: "Their Google listing has never been bought",
+        body: "Six checks — their reviews, their rating, their hours, their category and whether Google even has a website for them — have no source at all until it is. That is more than a third of the Problem score standing on nothing.",
+        href: "/records/enrich",
+        label: "Get the listing",
+        cost: "3.5¢, billed by Google Places, after you confirm",
+      };
+    }
+    if (instagram.url && !instagram.handle) {
+      return {
+        title: "There is an Instagram account nobody has opened",
+        body: "Followers and post count are the clearest proof a small business already spends money on being found — and they can lift a business with no website straight into Priority 1.",
+        href: "/records/enrich",
+        label: "Look it up",
+        cost: "0.26¢, billed by Apify, after you confirm",
+      };
+    }
+    return {
+      title: "Ring them",
+      body: "The findings are read, the opener is below, and there is nothing cheap left to learn about this business. The next useful thing is a phone call.",
+      href: `/records/${id}?tab=calls`,
+      label: "Log the call",
+      cost: null,
+    };
+  })();
+
   const openers = buildOpeners({
     businessName: business.display_name,
     city: business.city ?? null,
@@ -272,6 +351,15 @@ export default async function RecordDetailPage({
 
   const problem = business.problem_score as number | null;
   const intent = business.intent_score as number | null;
+
+  /**
+   * What this business's score was actually made of.
+   *
+   * From the findings this page has already loaded, so it costs nothing. It is the answer to the
+   * operator's question — "check nahi kia hua tab bhi score dikh raha hota hai" — said on the one
+   * screen where somebody is deciding whether to believe the number.
+   */
+  const checked = checkedness((findings ?? []) as unknown as CheckResult[]);
   const crux = fieldValue("crux_category");
   const perfScore = fieldValue("performance_score");
   const lcp = fieldValue("lcp_ms");
@@ -292,9 +380,19 @@ export default async function RecordDetailPage({
                 {business.tier ? <TierBadge tier={business.tier} /> : null}
                 {business.display_name}
               </h1>
-              <p style={{ margin: "0 0 16px", color: "var(--ink-3)", fontSize: 16 }}>
+              <p style={{ margin: "0 0 10px", color: "var(--ink-3)", fontSize: 16 }}>
                 {[business.city, business.state].filter(Boolean).join(", ") || "Location not recorded"}
               </p>
+
+              {/* How much is behind the priority badge above, in words, before anything else is
+                  read. A thin score is still a score — it is only dishonest when it is silent. */}
+              <div
+                className={checked.band === "nothing" || checked.band === "thin" ? "note warn" : "note"}
+                style={{ margin: "0 0 16px", maxWidth: 620 }}
+              >
+                <strong>{checked.measured === 0 ? "Nothing checked yet" : `Checked: ${checked.measured} of ${checked.catalogue}`}</strong>{" "}
+                {checked.sentence}
+              </div>
               <div style={{ display: "flex", gap: 30, flexWrap: "wrap", rowGap: 16 }}>
                 <span>
                   <div style={label}>Phone</div>
@@ -395,7 +493,7 @@ export default async function RecordDetailPage({
                     className="btn tip-right"
                     type="submit"
                     disabled={!websiteUrl}
-                    data-tip="Reads their website, runs all 51 checks, opens it in a real browser page by page, then scores it again. A couple of minutes, about 0.36¢."
+                    data-tip="Reads their website, runs all 64 checks, opens it in a real browser page by page, then scores it again. A couple of minutes, about 0.36¢."
                   >
                     Full analysis of this business
                   </button>
@@ -428,7 +526,7 @@ export default async function RecordDetailPage({
                     className="btn-2 btn tip-right"
                     type="submit"
                     style={{ fontSize: 15, padding: "7px 12px" }}
-                    data-tip="Fetches their pages again and re-runs the 51 checks and the score. Free. Sites that block robots will block this too — use Read page by page for those."
+                    data-tip="Fetches their pages again and re-runs the 64 checks and the score. Free. Sites that block robots will block this too — use Read page by page for those."
                   >
                     Re-read &amp; re-score
                   </button>
@@ -490,15 +588,7 @@ export default async function RecordDetailPage({
           The four tabs. Links, not buttons: each one is a URL, so a tab can be sent to someone and
           the back button moves between them.
         */}
-        <nav
-          style={{
-            display: "flex",
-            gap: 4,
-            flexWrap: "wrap",
-            borderBottom: "1.5px solid var(--rule)",
-            margin: "0 0 18px",
-          }}
-        >
+        <nav className="tabs" style={{ margin: "0 0 18px" }}>
           {[
             { id: "overview", label: "Overview" },
             { id: "website", label: `Website pages${scorecards.length > 0 ? ` (${scorecards.length})` : ""}` },
@@ -508,21 +598,47 @@ export default async function RecordDetailPage({
             <Link
               key={t.id}
               href={t.id === "overview" ? `/records/${id}` : `/records/${id}?tab=${t.id}`}
-              style={{
-                padding: "10px 14px",
-                fontSize: 16,
-                textDecoration: "none",
-                color: tab === t.id ? "var(--ink)" : "var(--ink-2)",
-                fontWeight: tab === t.id ? 700 : 500,
-                borderBottom: tab === t.id ? "3px solid var(--ink)" : "3px solid transparent",
-                marginBottom: -1.5,
-              }}
+              aria-selected={tab === t.id}
             >
               {t.label}
             </Link>
           ))}
         </nav>
 
+
+        {/*
+          One line, one button, on the tab a salesperson opens first. Every word of it comes from
+          the ladder computed above, so it cannot recommend something the record does not support.
+        */}
+        {tab === "overview" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 14,
+              flexWrap: "wrap",
+              padding: "13px 16px",
+              marginBottom: 18,
+              background: "var(--surface)",
+              border: "1px solid var(--rule)",
+              borderLeft: "3px solid var(--warn)",
+              borderRadius: "var(--radius)",
+            }}
+          >
+            <div style={{ minWidth: 0, flex: "1 1 320px" }}>
+              <strong style={{ fontSize: 15.5, color: "var(--ink)" }}>Next: {nextStep.title}</strong>
+              <div style={{ fontSize: 14, color: "var(--ink-2)", marginTop: 3, lineHeight: 1.5 }}>{nextStep.body}</div>
+              {nextStep.cost ? (
+                <div style={{ fontSize: 13.5, color: "var(--warn-ink)", marginTop: 5 }}>{nextStep.cost}</div>
+              ) : (
+                <div style={{ fontSize: 13.5, color: "var(--good-ink)", marginTop: 5 }}>Free</div>
+              )}
+            </div>
+            <Link href={nextStep.href} className="btn" style={{ textDecoration: "none", whiteSpace: "nowrap" }}>
+              {nextStep.label}
+            </Link>
+          </div>
+        )}
 
         {/*
           Two columns on the tabs that have something for both, one on the tabs that do not. The
@@ -797,19 +913,15 @@ export default async function RecordDetailPage({
                         opinion, and an opinion that looks like a measurement is the one failure
                         mode this feature must not have. */}
                     {card.critique && (
-                      <div
-                        style={{
-                          marginTop: 8,
-                          padding: "8px 10px",
-                          borderLeft: "3px solid var(--info)",
-                          background: "var(--surface-2)",
-                          borderRadius: 4,
-                          fontSize: 15,
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        <div style={{ fontSize: 13, letterSpacing: 0.4, color: "var(--ink-2)", fontWeight: 700 }}>
-                          WHAT THE MODEL MAKES OF IT
+                      <div className="note ai" style={{ marginTop: 8, lineHeight: 1.55 }}>
+                        {/* Violet, and labelled. In this product violet means one thing only — a
+                            language model wrote it — so the operator can tell an opinion from a
+                            measurement without reading either. */}
+                        <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
+                          <span className="badge ai">AI insight</span>
+                          <span style={{ fontSize: 12.5, color: "var(--ink-3)" }}>
+                            Gemini 2.5 Flash, from this page’s own text — not a score
+                          </span>
                         </div>
                         <div style={{ marginTop: 4 }}>{card.critique.purpose}</div>
                         <div style={{ marginTop: 4 }}>{card.critique.judgement}</div>

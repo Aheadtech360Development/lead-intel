@@ -1,0 +1,1200 @@
+<title>Lead Intel Platform Documentation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Serif:ital,wght@0,400;0,600;1,400&display=swap">
+<style>
+  :root {
+    --paper: #ffffff;
+    --ground: #f4f6fb;
+    --surface: #ffffff;
+    --surface-2: #f7f9fc;
+    --ink: #0a1020;
+    --ink-2: #232c3e;
+    --ink-3: #3a4459;
+    --rule: #e2e8f2;
+    --rule-2: #cbd4e4;
+    --brand: #3f37c9;
+    --brand-ink: #3730a3;
+    --brand-bg: #eef2ff;
+    --free: #046158;
+    --free-bg: #eefbf8;
+    --paid: #8a4a03;
+    --paid-bg: #fff7ed;
+    --ai: #6425d0;
+    --ai-bg: #f5f1ff;
+    --wall: #a8112f;
+    --wall-bg: #fff1f4;
+    --shadow: 0 1px 2px rgba(10, 16, 32, 0.04), 0 8px 24px -16px rgba(10, 16, 32, 0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0b0f1a;
+      --ground: #0b0f1a;
+      --surface: #121a2c;
+      --surface-2: #161f34;
+      --ink: #e9eefb;
+      --ink-2: #c3cde3;
+      --ink-3: #a3b0ca;
+      --rule: #25314b;
+      --rule-2: #35446a;
+      --brand: #a6a1fb;
+      --brand-ink: #c3bffd;
+      --brand-bg: #1c2145;
+      --free: #5fd9c4;
+      --free-bg: #10281f;
+      --paid: #f0b267;
+      --paid-bg: #2a1e0f;
+      --ai: #c4a6ff;
+      --ai-bg: #211640;
+      --wall: #ff8fa6;
+      --wall-bg: #2b1119;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #0b0f1a;
+    --ground: #0b0f1a;
+    --surface: #121a2c;
+    --surface-2: #161f34;
+    --ink: #e9eefb;
+    --ink-2: #c3cde3;
+    --ink-3: #a3b0ca;
+    --rule: #25314b;
+    --rule-2: #35446a;
+    --brand: #a6a1fb;
+    --brand-ink: #c3bffd;
+    --brand-bg: #1c2145;
+    --free: #5fd9c4;
+    --free-bg: #10281f;
+    --paid: #f0b267;
+    --paid-bg: #2a1e0f;
+    --ai: #c4a6ff;
+    --ai-bg: #211640;
+    --wall: #ff8fa6;
+    --wall-bg: #2b1119;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 10px 30px -18px rgba(0, 0, 0, 0.8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink-2);
+    font-family: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+    font-size: 16.5px;
+    line-height: 1.68;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 250px minmax(0, 1fr);
+    gap: 40px;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-inline: 20px;
+    padding-block: 0 64px;
+    align-items: start;
+  }
+
+  /* ---- contents rail ---------------------------------------------------- */
+  .rail {
+    position: sticky;
+    top: 0;
+    max-height: 100vh;
+    overflow-y: auto;
+    padding-block: 28px 32px;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .rail .mark {
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+
+  .rail .mark span { color: var(--brand); }
+
+  .rail ol {
+    list-style: none;
+    margin: 18px 0 0;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+    counter-reset: rail;
+  }
+
+  .rail a {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 4px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    color: var(--ink-3);
+    text-decoration: none;
+  }
+
+  .rail a::before {
+    counter-increment: rail;
+    content: counter(rail);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--ink-3);
+    padding-top: 2px;
+  }
+
+  .rail a:hover { background: var(--brand-bg); color: var(--brand-ink); }
+  .rail a:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+  .rail .railnote {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    color: var(--ink-3);
+    font-size: 12.5px;
+  }
+
+  /* ---- document --------------------------------------------------------- */
+  main { padding-block: 28px 0; min-width: 0; }
+
+  header.doc {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 34px 34px 28px;
+    box-shadow: var(--shadow);
+  }
+
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--brand-ink);
+  }
+
+  h1 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: clamp(30px, 4.6vw, 44px);
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    margin: 10px 0 12px;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+
+  .standfirst {
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-2);
+    max-width: 66ch;
+    margin: 0;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 28px;
+    margin-top: 24px;
+    padding-top: 18px;
+    border-top: 1px solid var(--rule);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14px;
+  }
+
+  .meta div { display: grid; gap: 1px; }
+  .meta dt { color: var(--ink-3); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .meta dd { margin: 0; color: var(--ink); font-weight: 600; }
+
+  section {
+    margin-top: 44px;
+    scroll-margin-top: 20px;
+  }
+
+  h2 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 26px;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 0 0 6px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--ink);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    text-wrap: balance;
+  }
+
+  h2 .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 15px;
+    color: var(--brand);
+    font-weight: 500;
+  }
+
+  h3 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 18.5px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 28px 0 6px;
+  }
+
+  h4 {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 15px;
+    color: var(--ink);
+    margin: 20px 0 4px;
+  }
+
+  p { margin: 12px 0; max-width: 74ch; }
+  ul, ol { margin: 12px 0; padding-left: 22px; max-width: 74ch; }
+  li { margin: 6px 0; }
+  strong { color: var(--ink); font-weight: 600; }
+  a { color: var(--brand-ink); }
+
+  code, .mono {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.87em;
+  }
+
+  code {
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--ink);
+  }
+
+  /* ---- repeated objects -------------------------------------------------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 20px 22px;
+    box-shadow: var(--shadow);
+  }
+
+  .grid {
+    display: grid;
+    gap: 14px;
+    margin: 18px 0;
+  }
+
+  .grid.two { grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); }
+  .grid.four { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    gap: 2px;
+  }
+
+  .stat b {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 27px;
+    line-height: 1.1;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat span {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13.5px;
+    color: var(--ink-3);
+  }
+
+  .note {
+    border-left: 4px solid var(--brand);
+    background: var(--brand-bg);
+    border-radius: 0 10px 10px 0;
+    padding: 14px 18px;
+    margin: 18px 0;
+    font-size: 15.5px;
+  }
+
+  .note.free { border-left-color: var(--free); background: var(--free-bg); }
+  .note.paid { border-left-color: var(--paid); background: var(--paid-bg); }
+  .note.ai { border-left-color: var(--ai); background: var(--ai-bg); }
+  .note.wall { border-left-color: var(--wall); background: var(--wall-bg); }
+  .note p:first-child { margin-top: 0; }
+  .note p:last-child { margin-bottom: 0; }
+
+  .tag {
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 99px;
+    white-space: nowrap;
+  }
+
+  .tag.free { color: var(--free); background: var(--free-bg); border: 1px solid var(--free); }
+  .tag.paid { color: var(--paid); background: var(--paid-bg); border: 1px solid var(--paid); }
+  .tag.ai { color: var(--ai); background: var(--ai-bg); border: 1px solid var(--ai); }
+  .tag.wall { color: var(--wall); background: var(--wall-bg); border: 1px solid var(--wall); }
+
+  .tablewrap { overflow-x: auto; margin: 18px 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14.5px;
+    min-width: 520px;
+  }
+
+  caption {
+    caption-side: top;
+    text-align: left;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 13px;
+    color: var(--ink-3);
+    padding-bottom: 8px;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  thead th {
+    font-size: 12px;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border-bottom: 1.5px solid var(--rule-2);
+    white-space: nowrap;
+  }
+
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: "IBM Plex Mono", monospace; }
+  tbody tr:last-child td { border-bottom: none; }
+
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    margin: 20px 0;
+  }
+
+  .flow > div {
+    border: 1px solid var(--rule);
+    border-top: 3px solid var(--brand);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 14px 16px;
+  }
+
+  .flow h4 { margin: 0 0 4px; }
+  .flow p { margin: 0; font-size: 14.5px; }
+  .flow .step {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px;
+    color: var(--brand);
+  }
+
+  pre {
+    background: var(--surface-2);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 14px 16px;
+    overflow-x: auto;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--ink);
+    margin: 16px 0;
+  }
+
+  dl.defs { margin: 14px 0; display: grid; gap: 10px; }
+  dl.defs > div { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; }
+  dl.defs dt { font-family: "IBM Plex Sans", system-ui, sans-serif; font-weight: 600; color: var(--ink); font-size: 14.5px; }
+  dl.defs dd { margin: 0; font-size: 15.5px; }
+
+  footer.doc {
+    margin-top: 52px;
+    padding-top: 20px;
+    border-top: 2px solid var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    font-size: 14px;
+    color: var(--ink-3);
+  }
+
+  @media (max-width: 1039px) {
+    .shell { grid-template-columns: minmax(0, 1fr); gap: 0; }
+    .rail { position: static; max-height: none; border-bottom: 1px solid var(--rule); padding-block: 24px 20px; }
+    .rail ol { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); display: grid; }
+    dl.defs > div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  }
+
+  @media print {
+    body { background: #fff; font-size: 11pt; line-height: 1.5; }
+    .shell { display: block; max-width: none; padding: 0; }
+    .rail { display: none; }
+    header.doc, .card, .stat, .flow > div, pre, .note { box-shadow: none; }
+    section { break-inside: auto; page-break-inside: auto; }
+    h2 { break-after: avoid; page-break-after: avoid; margin-top: 24px; }
+    h3, h4 { break-after: avoid; page-break-after: avoid; }
+    table, .flow > div, .stat, .note { break-inside: avoid; page-break-inside: avoid; }
+    a { color: var(--ink); text-decoration: none; }
+  }
+</style>
+
+<div class="shell">
+  <nav class="rail" aria-label="Contents">
+    <div class="mark">Lead<span>&nbsp;Intel</span></div>
+    <ol>
+      <li><a href="#overview">What the platform is</a></li>
+      <li><a href="#stages">The four stages</a></li>
+      <li><a href="#features">Feature inventory</a></li>
+      <li><a href="#analysis">How a website is analysed</a></li>
+      <li><a href="#checks">The check library</a></li>
+      <li><a href="#icps">ICP rules and matching</a></li>
+      <li><a href="#scoring">Scoring, priority and pitch</a></li>
+      <li><a href="#ai">Where AI is used</a></li>
+      <li><a href="#data">Data sources and cost</a></li>
+      <li><a href="#architecture">Technical architecture</a></li>
+      <li><a href="#engineering">Engineering practice</a></li>
+      <li><a href="#devops">DevOps and operations</a></li>
+      <li><a href="#team">Roles and skills</a></li>
+      <li><a href="#state">Current state and roadmap</a></li>
+    </ol>
+    <p class="railnote">Figures throughout are live counts from the production database on 21 September 2026, not estimates.</p>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <div class="eyebrow">Platform documentation · v1.0</div>
+      <h1>Lead Intel</h1>
+      <p class="standfirst">
+        A lead-intelligence platform for local-business sales. It finds businesses on Google Maps,
+        reads their websites, measures 64 named checks against them, scores what is wrong, decides
+        what to sell them, and buys extra data only when an operator asks for it — one business at a
+        time, with the price shown first.
+      </p>
+      <dl class="meta">
+        <div><dt>Built by</dt><dd>AheadTech360</dd></div>
+        <div><dt>Application</dt><dd>Lead Intel (internal)</dd></div>
+        <div><dt>Stack</dt><dd>TypeScript · Next.js 16 · Supabase · Trigger.dev</dd></div>
+        <div><dt>Hosting</dt><dd>Vercel (bom1) · Supabase (ap-south-1)</dd></div>
+        <div><dt>Automated tests</dt><dd>654 passing</dd></div>
+      </dl>
+    </header>
+
+    <!-- 1 ------------------------------------------------------------------>
+    <section id="overview">
+      <h2><span class="num">01</span> What the platform is</h2>
+
+      <p>
+        Cold outreach to local businesses fails for one reason above all others: the seller has
+        nothing specific to say. Lead Intel exists to remove that problem. For every business in the
+        list it answers three questions before anyone picks up the phone — <strong>is this business
+        worth calling</strong>, <strong>what exactly is wrong with their online presence</strong>,
+        and <strong>what should we sell them</strong> — and it answers them from measurements, each
+        one traceable back to the page, listing or account it came from.
+      </p>
+
+      <h3>In non-technical terms</h3>
+      <p>
+        The operator types a trade and a place — &ldquo;screen printing, Dallas&rdquo;. The platform
+        searches Google Maps across a grid of points, removes duplicates, then visits every website
+        it found and reads it. It counts what is missing: no mobile layout, no phone number in the
+        header, no reviews on the page, a contact form with fourteen fields, no tracking of any
+        kind. It turns those counts into two scores, sorts the list so the best call is the first
+        row, and writes the opening line of the call from one specific finding.
+      </p>
+      <p>
+        Everything above is free. Anything that costs money — a business's Google listing details,
+        their Instagram following, whether they are running ads — is bought only for businesses the
+        operator has ticked, on a screen that shows the price, the provider and the total first.
+      </p>
+
+      <h3>In technical terms</h3>
+      <p>
+        A TypeScript monorepo: a server-rendered Next.js 16 application for the operator, a
+        Trigger.dev worker fleet for everything long-running, a Supabase Postgres database with
+        row-level security, and a set of provider adapters (Google Places, Google PageSpeed, YouTube
+        Data API, Apify, Google AI Studio) behind one interface each. Business logic — checks,
+        scoring, ICP matching, deduplication, import parsing — lives in a pure package with no I/O,
+        which is why it can carry 540 unit tests.
+      </p>
+
+      <div class="grid four">
+        <div class="stat"><b>422</b><span>businesses in the system</span></div>
+        <div class="stat"><b>17,943</b><span>findings recorded</span></div>
+        <div class="stat"><b>347</b><span>website pages read in a browser</span></div>
+        <div class="stat"><b>$5.39</b><span>total spent with all providers</span></div>
+      </div>
+
+      <div class="note">
+        <p>
+          <strong>The rule the whole product is built on: unknown is a third answer.</strong> A
+          business whose website could not be reached is not a business with a bad website. A
+          business whose Instagram was never bought does not have zero followers. Every stored value
+          can be <em>yes</em>, <em>no</em>, or <em>nobody has looked</em>, and the third never
+          silently becomes one of the first two — not in a score, not in a filter, not in a chart.
+        </p>
+      </div>
+    </section>
+
+    <!-- 2 ------------------------------------------------------------------>
+    <section id="stages">
+      <h2><span class="num">02</span> The four stages</h2>
+      <p>
+        Every screen in the product belongs to exactly one of four stages. Two of them can cost
+        money and two can never cost anything, and the interface says which is which at all times.
+      </p>
+
+      <div class="flow">
+        <div>
+          <div class="step">Stage 1</div>
+          <h4>Sourcing</h4>
+          <p>Getting businesses in: a Google Maps search for an ICP, a CSV import, or one typed by hand. <span class="tag paid">Can cost</span></p>
+        </div>
+        <div>
+          <div class="step">Stage 2</div>
+          <h4>Filtering</h4>
+          <p>Narrowing to the customers you want: your ICPs, then the filters on the leads list. <span class="tag free">Free</span></p>
+        </div>
+        <div>
+          <div class="step">Stage 3</div>
+          <h4>Analysis</h4>
+          <p>Judging what is wrong: the crawler, 64 checks, your checklists, speed, reviews. <span class="tag free">Free</span></p>
+        </div>
+        <div>
+          <div class="step">Stage 4</div>
+          <h4>Enrichment</h4>
+          <p>Buying what is missing: Google listing, Instagram, ads — per business, after a confirm screen. <span class="tag paid">Paid</span></p>
+        </div>
+      </div>
+
+      <p>
+        The order matters operationally: filtering and analysis are free and repeatable, so the list
+        is narrowed and judged <em>before</em> a single paid lookup is made. In the data so far, 422
+        businesses have produced 17,943 findings for a total provider spend of $5.39.
+      </p>
+    </section>
+
+    <!-- 3 ------------------------------------------------------------------>
+    <section id="features">
+      <h2><span class="num">03</span> Feature inventory</h2>
+      <p>Every screen currently in the product, and what it does.</p>
+
+      <h3>Dashboard</h3>
+      <ul>
+        <li>The four stages as columns, each holding its own figures: businesses in the list and where they came from; how many are worth calling and how many are in an ICP; how many have been analysed and how many are Priority 1; total spend and what has been bought.</li>
+        <li><strong>What to do next</strong> — only actions that actually need doing appear, each with a single button (analyse the unanalysed, call the Priority 1 leads, price the Instagram accounts nobody has looked up, log the first calls).</li>
+        <li>Four breakdowns — priority, what to sell, website state, ICPs — where every row is a link that opens the leads list with that filter applied.</li>
+        <li>Spend grouped by the company that actually invoices it, not by internal endpoint name.</li>
+      </ul>
+
+      <h3>Leads — the call list, in three steps</h3>
+      <ul>
+        <li><strong>Step 1 · Choose:</strong> search by name, town or ICP, plus one menu per filter — ICP, worth-calling view, claimed, priority, what to sell, website state, row colour, Google reviews, place, Instagram &amp; ads, source, one imported file. Every choice becomes a removable chip with a live count (&ldquo;176 of 422 businesses&rdquo;), and the table never shifts when a menu opens.</li>
+        <li><strong>Step 2 · Tick:</strong> a fixed-column table, 50 rows a page, with row tints that encode presence: red = reviews but no website and no Instagram, blue = Instagram but no working website, peach = website but no Instagram, green = both.</li>
+        <li><strong>Step 3 · Act:</strong> one panel holding every action with its price and its billing provider — analyse (free), read pages in a browser (0.36¢ a site, Gemini), buy extra data (priced on the next screen), download CSV (free), plus two whole-list jobs. Buttons that need a selection are visibly switched off and say why on hover.</li>
+        <li>Two filters — <strong>Budget</strong> and <strong>Revenue</strong> — are deliberately present and switched off, with the reason on hover: nobody publishes what a small private business earns or spends.</li>
+      </ul>
+
+      <h3>One business — four tabs</h3>
+      <ul>
+        <li><strong>Overview:</strong> why this lead, the opening line to use, an optional AI briefing, their Instagram and ads, and &ldquo;everything we know&rdquo; grouped by <em>who told us</em> — Google listing, their own website, away from their site — because those sources are not equally reliable.</li>
+        <li><strong>Website pages:</strong> one scorecard per page a real browser read, with screenshots of the home and product pages, the checklist verdicts for that page, and the model's read of it.</li>
+        <li><strong>Checks &amp; scores:</strong> score by area, the biggest problems with their evidence, speed, every check with its verdict (wrong / fine / could not measure), and where every stored value came from.</li>
+        <li><strong>Calls &amp; history:</strong> log a call in a panel (channel, result, objection, what you opened with, notes, meeting date), previous calls, and every job ever run on this business with its cost.</li>
+      </ul>
+
+      <h3>ICPs</h3>
+      <ul>
+        <li>The list of ICPs in priority order, each showing its industry, the words it is searched by on Google Maps, the words and conditions that recognise one, and how many businesses are in it.</li>
+        <li>Add or edit in a panel: name, industry, Google Maps search words, three separate word boxes (anywhere / their website / their Instagram), exclusions, follower range, review floor, required working website, places.</li>
+        <li>A preview that counts what the ICP would take <em>before</em> saving, and a free re-match over the whole list.</li>
+        <li>A standing count of businesses no ICP describes — kept, never deleted.</li>
+      </ul>
+
+      <h3>Checklists</h3>
+      <ul>
+        <li>The operator's own definition of a good page: which page type, which industry, what to measure, the comparison and value, the weight, and the sentence to say on a call when it fails.</li>
+        <li>Every rule is measured against the 347 pages already read, so the effect of a rule is visible before it is saved. 12 rules are live today.</li>
+      </ul>
+
+      <h3>Find businesses · Import · Imported files · Add by hand</h3>
+      <ul>
+        <li>Search Google Maps for an ICP (all its words, one run each) or a single word; choose a place and radius; see the estimated number of requests and the cost range; set a spend cap and a business cap. Nothing is spent before the confirm screen.</li>
+        <li>CSV import with loose column matching, a preview that separates new rows, rows that will merge into existing businesses, possible duplicates and unreadable rows, and a plan for what happens after import.</li>
+        <li>Every uploaded file is kept with what it produced, and can be deleted.</li>
+      </ul>
+
+      <h3>Instagram · Data &amp; spend · How it works</h3>
+      <ul>
+        <li>Instagram: who has an account, who has been looked up, followers, Instagram's own category beside your ICP, and who is running ads.</li>
+        <li>Data &amp; spend: every source, what it gives, price per business, who bills it, and a ledger of what has actually been spent.</li>
+        <li>How it works: every rule in the product in plain words, generated from the same constants the code uses.</li>
+      </ul>
+
+      <h3>Cross-cutting</h3>
+      <ul>
+        <li><strong>Background jobs</strong> appear at the top of every screen while they run, with progress, cost so far, elapsed time and a <strong>Stop</strong> button that cancels the platform run and marks the row stopped.</li>
+        <li><strong>Hover help</strong> on buttons and filters explains what pressing does and what it costs; a switched-off control explains why it is off.</li>
+        <li>The whole application is server-rendered with <strong>no client-side JavaScript</strong>: filters, panels, tabs, ticks and pagination are all URLs and form submissions.</li>
+      </ul>
+    </section>
+
+    <!-- 4 ------------------------------------------------------------------>
+    <section id="analysis">
+      <h2><span class="num">04</span> How a website is analysed</h2>
+      <p>
+        Website analysis runs in two layers. The first is free, fast and used on everything; the
+        second is a real browser and is used where it earns its cost.
+      </p>
+
+      <h3>Layer 1 — our own crawler <span class="tag free">Free</span></h3>
+      <ol>
+        <li><strong>Resolve and fetch.</strong> Three DNS attempts, <code>robots.txt</code> respected via <code>robots-parser</code>, a pinned desktop Chrome user-agent and an <code>x-crawled-by</code> header. HTML is capped at 12&nbsp;MB; a larger document is recorded as <code>too_big</code> rather than failing silently.</li>
+        <li><strong>Walk the site.</strong> Home page first, then internal links classified into page types — home, services, products, pricing, about, contact — so a rule can address &ldquo;the contact page&rdquo; and mean it.</li>
+        <li><strong>Extract structure.</strong> Parsed with <code>cheerio</code> into a JSON description of the page: headings, forms and their field counts, tap-to-call links, embedded reviews, images and alt text, schema markup, social links (scanned across the whole document, not only the footer), tracking scripts, booking and chat widgets, careers links.</li>
+        <li><strong>Store evidence.</strong> Text digests, emails and phone numbers found on their own pages, the final URL, HTTP status, and the outcome of the crawl are written to <code>field_metadata</code> and <code>page_audits</code>, each with a source name and a timestamp.</li>
+      </ol>
+
+      <h3>Layer 2 — a real browser <span class="tag paid">0.36¢ a site</span></h3>
+      <ol>
+        <li><strong>Render.</strong> Playwright 1.57 (Chromium) opens the page at phone width, auto-scrolls it so lazy content loads, and measures layout facts a parser cannot see: what is above the fold, whether the page scrolls sideways, tap-target sizes, how long until main content appears.</li>
+        <li><strong>Screenshot.</strong> Home and product pages are captured, clipped to three viewports, and stored in a private Supabase Storage bucket; links to them are signed on demand and expire.</li>
+        <li><strong>Critique.</strong> The measurements — never the raw page — are handed to Gemini, which writes what those measurements miss in a sentence an operator can say on a call. See §8.</li>
+        <li><strong>Re-score.</strong> The business is scored again immediately, so a page read changes its priority in the same run.</li>
+      </ol>
+
+      <h3>Checklists — the operator's own definition of good</h3>
+      <p>
+        Both layers feed a checklist engine. A checklist rule names a page type, optionally an
+        industry, a measurable field, a comparison, a value, a weight, and the sentence to say when
+        it fails. Rules are evaluated against stored page structure, so editing a rule re-judges 347
+        already-read pages instantly and for free. A rule that cannot be evaluated — the page never
+        rendered, the field was never captured — returns <em>not checkable</em> and is excluded from
+        the page score rather than counted as a failure.
+      </p>
+    </section>
+
+    <!-- 5 ------------------------------------------------------------------>
+    <section id="checks">
+      <h2><span class="num">05</span> The check library</h2>
+      <p>
+        64 checks are defined, each with a stable identifier, a family, a weight and an explanation.
+        About 51 produce verdicts on live data today; the remainder are recorded as <em>not
+        measured</em> with a stated reason, because the data behind them is not published by anyone
+        (see §9).
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <caption>Check families, the area each feeds, and what they measure</caption>
+          <thead>
+            <tr><th>Family</th><th class="num">IDs</th><th>Area</th><th>What it measures</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>W</strong> — Website</td><td class="num">W1–W12</td><td>Website quality</td><td>Mobile layout, HTTPS, speed, modernity, broken images, sideways scroll, page weight, last-updated signals</td></tr>
+            <tr><td><strong>K</strong> — Contact</td><td class="num">K1–K8</td><td>Turning visitors into customers</td><td>Phone in the header, tap-to-call, address, opening hours, contact form length, call-to-action above the fold</td></tr>
+            <tr><td><strong>S</strong> — Search</td><td class="num">S1–S14</td><td>Being found on Google</td><td>Titles and meta, one main heading, schema markup, sitemap, indexability, Google listing completeness and category</td></tr>
+            <tr><td><strong>R</strong> — Reputation</td><td class="num">R1–R6</td><td>Reviews &amp; reputation</td><td>Review count and rating, recency, whether reviews appear on their own site, review names</td></tr>
+            <tr><td><strong>O</strong> — Off-site</td><td class="num">O1–O8</td><td>Social media</td><td>Instagram and Facebook presence, follower scale, posting activity, YouTube channel and last upload</td></tr>
+            <tr><td><strong>D</strong> — Demand capture</td><td class="num">D1–D6</td><td>Ads &amp; tracking</td><td>Analytics, pixels, tag managers, conversion tracking, live ads</td></tr>
+            <tr><td><strong>N</strong> — Intent signals</td><td class="num">N1–N10</td><td>(feeds the second score)</td><td>Evidence they already pay for things: booking tools, chat widgets, careers pages, paid themes, ad pixels</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Every finding stores the evidence that produced it, so a verdict on a record can always be
+        traced to the page and the measurement behind it. Current distribution across 422
+        businesses: <strong>7,884 passed</strong>, <strong>3,909 fired</strong>, <strong>5,899 not
+        measured</strong>, 251 not applicable.
+      </p>
+    </section>
+
+    <!-- 6 ------------------------------------------------------------------>
+    <section id="icps">
+      <h2><span class="num">06</span> ICP rules and matching</h2>
+      <p>
+        An ICP — ideal customer profile — is the operator's own description of a customer they want.
+        It does two jobs in one record: it is <strong>searched for</strong> on Google Maps, and it
+        <strong>recognises</strong> businesses already in the list. Writing it once is what keeps
+        those two halves from drifting apart.
+      </p>
+
+      <h3>What an ICP holds</h3>
+      <dl class="defs">
+        <div><dt>Name and industry</dt><dd>What the operator calls this customer, and the trade it sits in. The industry is also what scopes checklist rules.</dd></div>
+        <div><dt>Search words</dt><dd>What a person would type into Google Maps. Several per ICP; Find businesses runs one search per word.</dd></div>
+        <div><dt>Word groups</dt><dd>Three separate lists: <em>anywhere</em> (business name, website text, domain, Instagram bio, Instagram category, handle, ad copy), <em>their website only</em>, <em>their Instagram only</em>.</dd></div>
+        <div><dt>Exclusions</dt><dd>Words that rule a business out, checked across every source the ICP can read — suppliers, equipment sellers and wholesalers use the same vocabulary as the customers wanted.</dd></div>
+        <div><dt>Conditions</dt><dd>Follower range, minimum Google reviews, a working website required, and places (towns or states).</dd></div>
+        <div><dt>Order and on/off</dt><dd>Lower order is checked first; the first ICP that matches wins; an ICP can be switched off without being deleted.</dd></div>
+      </dl>
+
+      <h3>How matching works</h3>
+      <ol>
+        <li>ICPs are sorted by order, disabled ones removed.</li>
+        <li><strong>Conditions are asked first.</strong> If an ICP requires a working website, a business whose site could not be reached is declined — and so is one nobody has ever looked at. Review floors and follower ranges behave the same way. <em>An unanswerable condition never passes.</em></li>
+        <li>Exclusions are checked across every source that ICP can read, not only the source that matched.</li>
+        <li>Each filled word group is asked separately. <code>requireAll = false</code> means any group firing is enough; <code>true</code> means every filled group must fire — the only way to express &ldquo;sells printing on their site <em>and</em> presents as a clothing brand on Instagram&rdquo;.</li>
+        <li>Term matching requires a word boundary on at least one side, so <code>dtf</code> matches <code>bestpricedtf.com</code> and <code>dtfdallas.com</code> but not an accidental run of letters inside an unrelated word.</li>
+        <li>The first ICP to satisfy everything wins. The business stores the ICP's name, its id, and the time it was matched; the record shows which word matched and where it was found.</li>
+        <li>A business that no longer fits any ICP has it <strong>cleared</strong>, not left behind. A stale label looks like a decision somebody made.</li>
+      </ol>
+
+      <div class="note free">
+        <p>
+          Matching reads only stored text and stored facts. It makes no network calls and costs
+          nothing, which is what makes &ldquo;edit an ICP, re-match everyone, look, edit again&rdquo;
+          a usable loop over hundreds of businesses.
+        </p>
+      </div>
+
+      <p>
+        Five ICPs are live today. 200 of 422 businesses sit in one; 222 match none and are kept in
+        one place rather than deleted.
+      </p>
+    </section>
+
+    <!-- 7 ------------------------------------------------------------------>
+    <section id="scoring">
+      <h2><span class="num">07</span> Scoring, priority and pitch</h2>
+
+      <h3>Two scores</h3>
+      <p>
+        Checks roll up into six areas — website quality, being found on Google, reviews and
+        reputation, turning visitors into customers, social media, ads and tracking. Each area
+        scores 0–100, where higher means more is wrong.
+      </p>
+      <pre>problem = 0.6 × (worst area) + 0.4 × (weighted average of all areas)
+intent  = weighted roll-up of the N family (do they already pay for things?)</pre>
+      <p>
+        Weighting the worst area at 60% is deliberate: a business with one catastrophic problem is a
+        better call than one that is mediocre everywhere, because the call has something specific to
+        open with.
+      </p>
+
+      <h3>Presence override</h3>
+      <p>
+        If a business has no website, a dead one, or only a social page, the problem score is lifted
+        to the presence floor and the recommendation is forced to <strong>build them a
+        website</strong> — nothing else can be sold until there is one.
+      </p>
+
+      <h3>Priority</h3>
+      <div class="tablewrap">
+        <table>
+          <caption>Tiers, from problem score ≥ 55 and intent score ≥ 35</caption>
+          <thead><tr><th>Tier</th><th>Problem</th><th>Intent</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><strong>1</strong></td><td>high</td><td>high</td><td>Lots wrong <em>and</em> they already spend money — call these first</td></tr>
+            <tr><td><strong>2</strong></td><td>low</td><td>high</td><td>Spends money, little wrong — a harder sell</td></tr>
+            <tr><td><strong>3</strong></td><td>high</td><td>low</td><td>Lots wrong, no sign they spend yet</td></tr>
+            <tr><td><strong>4</strong></td><td>low</td><td>low</td><td>Lowest priority</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>The spend gate</h3>
+      <p>
+        A business passes the gate at a problem score of <strong>55</strong> and no shared-domain
+        warning. The gate decides where money <em>may</em> be spent; it never spends it. It is also
+        the documented lever: if a run would cost too much, the cut-off is raised so fewer businesses
+        qualify — the depth of analysis on those that do is never reduced.
+      </p>
+
+      <h3>What to sell them</h3>
+      <p>
+        The recommendation is the area that scored worst, mapped to one of six routes: build them a
+        website, get them found on Google, fix their reviews, make their site convert, run their
+        social media, set up ads and tracking. <strong>A route with no finding to show is not
+        offered at all</strong> — the record says so, and the business is flagged for manual review
+        instead of being given an unsupported pitch.
+      </p>
+    </section>
+
+    <!-- 8 ------------------------------------------------------------------>
+    <section id="ai">
+      <h2><span class="num">08</span> Where AI is used</h2>
+
+      <div class="note ai">
+        <p>
+          <strong>Model:</strong> Google Gemini <code>gemini-2.5-flash</code>, called through the
+          Google AI Studio API from a single adapter in <code>packages/providers/src/gemini</code>.
+          <strong>Nothing about a business is decided by a model.</strong> Scores, priorities, ICP
+          membership and the recommended pitch are computed by code from measurements. AI is used in
+          exactly three optional places, and each one is a suggestion or a rewording of numbers the
+          system already holds.
+        </p>
+      </div>
+
+      <h3>1 · Writing an ICP from a description <span class="tag ai">≈0.1¢ per use</span></h3>
+      <p>
+        The operator describes the customer they want in plain English or Roman Urdu — &ldquo;mujhe
+        wo log chahiye jo apna clothing brand chalate hain aur khud print bhi karte hain&rdquo;. The
+        model is given that description, the ICPs that already exist so it does not duplicate them,
+        and real sample text from the operator's own businesses so the vocabulary comes from how
+        these businesses actually write. It returns a draft: name, industry, Google Maps search
+        words, the three word groups, exclusions, and one line of reasoning per term.
+      </p>
+      <p>
+        <strong>Guardrails:</strong> the draft is never saved. It fills the form, a mechanical check
+        flags terms that are too generic or too short to be safe, and the preview counts what the
+        draft would actually catch before the operator presses Save. Conditions (reviews, followers,
+        website, places) are never suggested — they are claims about facts, so the operator sets them
+        deliberately.
+      </p>
+
+      <h3>2 · Critiquing a page that a browser read <span class="tag ai">0.36¢ a site</span></h3>
+      <p>
+        After Playwright renders a page, the model is handed the <em>measurements</em> — heading
+        structure, form fields, what sits above the fold, tap-target sizes, load timings, the page's
+        own text digest — and asked what those measurements miss, in a sentence that can be said on
+        a call. It is explicitly not asked to browse, to fetch, or to state facts about the business.
+        Its answer is stored beside the page it describes, never mixed into the findings, and the
+        checklist verdicts remain the system's own.
+      </p>
+
+      <h3>3 · A plain-words briefing for one business <span class="tag ai">≈0.3¢ per use</span></h3>
+      <p>
+        On a lead record, the operator can ask for one paragraph summarising the findings already on
+        screen, so they can read a briefing instead of scanning a list of 20 lines before dialling.
+        The model receives the stored findings, the scores and the business's own website text. If
+        the model's answer cannot be parsed, or it disagrees with the operator's ICP, the record says
+        so and the underlying findings are shown unchanged.
+      </p>
+
+      <h3>The standing rules for AI in this system</h3>
+      <ul>
+        <li><strong>It is shown measurements; it is never asked to find facts.</strong> No model call decides whether a business has a website, how many reviews it has, or which ICP it belongs to.</li>
+        <li><strong>Every call is priced and logged.</strong> AI spend appears in the same ledger as every other provider, grouped under Google AI Studio (Gemini) on the dashboard.</li>
+        <li><strong>Every call is optional.</strong> The platform runs end to end with AI switched off; the three features above simply do not appear.</li>
+        <li><strong>Failures are visible.</strong> A refused, unparseable or quota-limited answer is reported to the operator with the reason — never replaced with a guess.</li>
+      </ul>
+    </section>
+
+    <!-- 9 ------------------------------------------------------------------>
+    <section id="data">
+      <h2><span class="num">09</span> Data sources and cost</h2>
+
+      <h3>Free — runs on every business</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Source</th><th>What it gives</th><th>Provider</th></tr></thead>
+          <tbody>
+            <tr><td>Our own crawler</td><td>Pages, structure, emails, phone numbers, social links, text digests</td><td>Self-hosted (Trigger.dev machine time)</td></tr>
+            <tr><td>The 64 checks</td><td>Verdicts with evidence, in six areas plus intent</td><td>Own code</td></tr>
+            <tr><td>Scoring and ICP matching</td><td>Two scores, tier, recommended pitch, ICP membership</td><td>Own code</td></tr>
+            <tr><td>Google PageSpeed</td><td>Mobile performance, main-content timing</td><td>Google PageSpeed Insights API</td></tr>
+            <tr><td>YouTube channel</td><td>Channel presence and last upload (daily quota)</td><td>YouTube Data API v3</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Paid — bought per business, after a confirm screen</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Source</th><th>What it gives</th><th class="num">Per business</th><th>Billed by</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Google listing details</td><td>Rating, review count, hours, category, trading status</td><td class="num">3.5¢</td><td>Google Places API</td><td>Live</td></tr>
+            <tr><td>Instagram profile</td><td>Followers, posts, Instagram's category, bio, link</td><td class="num">0.26¢</td><td>Apify</td><td>Live</td></tr>
+            <tr><td>Facebook / Instagram ads</td><td>Whether ads are running, how many, since when</td><td class="num">11.6¢</td><td>Apify</td><td>Live</td></tr>
+            <tr><td>Page critique</td><td>The model's read of one rendered page</td><td class="num">0.36¢</td><td>Google AI Studio (Gemini)</td><td>Live</td></tr>
+            <tr><td>Owner's mobile</td><td>A direct mobile number for the owner</td><td class="num">73¢</td><td>Lusha</td><td>Needs a key</td></tr>
+            <tr><td>Website traffic estimate</td><td>Estimated monthly visits</td><td class="num">0.12¢</td><td>DataForSEO</td><td>Needs a key</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>How spending is controlled</h3>
+      <ul>
+        <li><strong>A ledger row is written before the call, not after.</strong> <code>provider_calls</code> holds 326 rows totalling $5.39, and every figure the product shows about money is read from it.</li>
+        <li><strong>Idempotency:</strong> anything already bought for a business is free the second time — the confirm screen says how many of the selected businesses are already covered.</li>
+        <li><strong>Spend caps:</strong> a search carries a maximum spend and a maximum number of businesses; choosing an ICP with four search words splits the cap across the four runs rather than multiplying it.</li>
+        <li><strong>Confirm screens:</strong> no paid source is ever bought as a side effect of another action.</li>
+      </ul>
+
+      <div class="note wall">
+        <p><strong>What cannot be bought at any price, and is documented as such:</strong></p>
+        <ul>
+          <li>The list of who follows an Instagram account — Instagram publishes a follower count and never the list.</li>
+          <li>What a business spends on advertising — Meta publishes spend only for political and issue ads.</li>
+          <li>Whether a Google listing has been claimed — the field does not exist in the Places API.</li>
+          <li>Budget and revenue for small private businesses — no provider publishes it, which is why both filters ship switched off with that reason on hover.</li>
+        </ul>
+      </div>
+
+      <div class="note paid">
+        <p>
+          <strong>Compliance note carried in the product:</strong> in the US, TCPA treats mobile
+          numbers as residential even when they belong to a business owner, and the B2B exemption
+          covers business landlines. That is why the owner's-mobile source is built, priced and left
+          switched off pending a compliance review rather than quietly enabled.
+        </p>
+      </div>
+    </section>
+
+    <!-- 10 ----------------------------------------------------------------->
+    <section id="architecture">
+      <h2><span class="num">10</span> Technical architecture</h2>
+
+      <h3>Shape</h3>
+      <pre>lead-intel/                     npm workspaces monorepo, TypeScript 5.6 (strict)
+├─ apps/
+│  ├─ web/      Next.js 16.3 · React 19.2 · App Router · server components
+│  └─ jobs/     Trigger.dev 4.5 worker: 13 tasks · Drizzle ORM · Playwright
+└─ packages/
+   ├─ core/     pure business logic — checks, scoring, ICP matching,
+   │            deduplication, import parsing, outreach lines   (no I/O)
+   ├─ providers/ one adapter per external service, each with its own errors
+   ├─ db/       Drizzle schema + client (worker side)
+   └─ shared/   enums, constants, prices, thresholds — one source of truth</pre>
+
+      <h3>Languages and runtimes</h3>
+      <dl class="defs">
+        <div><dt>TypeScript 5.6</dt><dd>Every line of application code, strict mode, no <code>any</code> in the public surface of a package.</dd></div>
+        <div><dt>SQL (PostgreSQL 15)</dt><dd>Schema, row-level security policies, indexes and hand-written migrations.</dd></div>
+        <div><dt>HTML + CSS</dt><dd>Hand-written, no UI framework and no CSS framework: one token file, semantic colour, and components built from it.</dd></div>
+        <div><dt>Node.js 20+</dt><dd>Runtime for both the web app's server side and the worker (currently Node 22 locally).</dd></div>
+        <div><dt>Python 3</dt><dd>Only for the design-wireframe generator that produces the product's low-fidelity screens.</dd></div>
+      </dl>
+
+      <h3>Database — Supabase PostgreSQL (ap-south-1)</h3>
+      <p>17 tables, all under row-level security. The core of the model:</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Table</th><th class="num">Cols</th><th>Holds</th></tr></thead>
+          <tbody>
+            <tr><td><code>businesses</code></td><td class="num">36</td><td>One row per business: identity, presence, scores, tier, route, ICP, claim state, origin</td></tr>
+            <tr><td><code>identity_keys</code></td><td class="num">7</td><td>place_id, domain, phone, name+location — the keys deduplication matches on, ranked</td></tr>
+            <tr><td><code>field_metadata</code></td><td class="num">14</td><td>Every stored fact with its source and when it was verified — the audit trail</td></tr>
+            <tr><td><code>findings</code></td><td class="num">16</td><td>17,943 check verdicts with evidence, outcome and weight</td></tr>
+            <tr><td><code>page_audits</code></td><td class="num">22</td><td>347 rendered pages: type, structure JSON, layout JSON, screenshot path, critique</td></tr>
+            <tr><td><code>page_checklists</code></td><td class="num">13</td><td>The operator's own page rules, scoped by page type and industry</td></tr>
+            <tr><td><code>icps</code></td><td class="num">20</td><td>ICP definitions: words, groups, exclusions, conditions, order</td></tr>
+            <tr><td><code>runs</code> + <code>run_grid_cells</code></td><td class="num">15 / 11</td><td>Discovery searches and the geographic grid each one covered, including cells that saturated and split</td></tr>
+            <tr><td><code>provider_calls</code></td><td class="num">10</td><td>The money ledger: endpoint, business, cost, status — written before each paid call</td></tr>
+            <tr><td><code>job_runs</code></td><td class="num">14</td><td>Progress, cost and outcome of every background job, linked to its Trigger.dev run</td></tr>
+            <tr><td><code>outcomes</code></td><td class="num">11</td><td>Logged calls: channel, result, objection, what was opened with, notes</td></tr>
+            <tr><td><code>import_batches</code>, <code>merge_snapshots</code>, <code>exclusions</code>, <code>suppression_hashes</code>, <code>user_roles</code></td><td class="num">9 / 9 / 7 / 5 / 3</td><td>Uploaded files, reversible merges, do-not-contact lists, roles</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Connections and external services</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Connection</th><th>Protocol / SDK</th><th>Used for</th></tr></thead>
+          <tbody>
+            <tr><td>Web → Supabase</td><td><code>@supabase/ssr</code> + PostgREST over HTTPS, user's JWT</td><td>All reads and writes the operator performs, under RLS as that user</td></tr>
+            <tr><td>Worker → Supabase</td><td>Drizzle ORM over the Postgres pooler, service role</td><td>Bulk writes from jobs — crawling, scoring, matching, enrichment</td></tr>
+            <tr><td>Web → Trigger.dev</td><td><code>@trigger.dev/sdk</code> (<code>tasks.trigger</code>, <code>runs.cancel</code>)</td><td>Enqueueing and stopping jobs; the web app never does long work itself</td></tr>
+            <tr><td>Worker → Google Places</td><td>REST (Text Search, Place Details)</td><td>Discovery and listing details</td></tr>
+            <tr><td>Worker → PageSpeed / YouTube</td><td>REST</td><td>Mobile performance; channel presence</td></tr>
+            <tr><td>Worker → Apify</td><td>REST actor runs</td><td>Instagram profiles; Facebook/Instagram ad presence</td></tr>
+            <tr><td>Worker → Google AI Studio</td><td>REST (Gemini 2.5 Flash, JSON mode)</td><td>The three AI features in §8</td></tr>
+            <tr><td>Worker → the open web</td><td>fetch + Playwright Chromium</td><td>Crawling and rendering business websites</td></tr>
+            <tr><td>Storage</td><td>Supabase Storage, private bucket, signed URLs</td><td>Page screenshots</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Background jobs</h3>
+      <p>
+        13 Trigger.dev tasks, each idempotent and each reporting progress into <code>job_runs</code>:
+        <code>discovery</code>, <code>analyse-run</code>, <code>audit-website</code>,
+        <code>audit-site</code>, <code>audit-site-run</code>, <code>audit-run</code>,
+        <code>pagespeed</code>, <code>pagespeed-run</code>, <code>youtube</code>,
+        <code>youtube-run</code>, <code>match-icps-run</code>, <code>score-run</code>,
+        <code>enrich-run</code>. Long passes run in batches, check a stop flag between batches, and
+        write partial results — a stopped job keeps everything it had already done.
+      </p>
+
+      <h3>Application design choices</h3>
+      <ul>
+        <li><strong>Zero client-side JavaScript.</strong> Every interaction is a link, a GET form or a server action: filter menus are <code>&lt;details&gt;</code>, panels and tabs are URLs, ticking rows is a form. The result is a product that works on a slow connection and has no hydration cost.</li>
+        <li><strong>One predicate, two screens.</strong> The leads list and the buy screen share <code>matchesFilters</code>, so &ldquo;buy for all 176 shown&rdquo; can never price a different set than the one on screen.</li>
+        <li><strong>One source of truth for constants.</strong> Prices, thresholds, area weights and enums live in <code>packages/shared</code> and are read by the worker, the web app and the &ldquo;How it works&rdquo; page alike.</li>
+      </ul>
+    </section>
+
+    <!-- 11 ----------------------------------------------------------------->
+    <section id="engineering">
+      <h2><span class="num">11</span> Engineering practice</h2>
+
+      <div class="grid four">
+        <div class="stat"><b>654</b><span>automated tests passing</span></div>
+        <div class="stat"><b>540</b><span>in the pure logic package</span></div>
+        <div class="stat"><b>21</b><span>applied SQL migrations</span></div>
+        <div class="stat"><b>0</b><span>client-side JS bundles for UI logic</span></div>
+      </div>
+
+      <ul>
+        <li><strong>Testing:</strong> Vitest. The <code>core</code> package is pure, so every check, score, tier boundary, ICP condition, dedup rule and CSV edge case is tested without a database. Provider adapters are tested against recorded responses, including failure shapes — quota exhausted, rate limited, empty body with HTTP 200.</li>
+        <li><strong>Type safety:</strong> strict TypeScript across the monorepo; database types flow from the Drizzle schema; enums and prices are shared constants rather than string literals.</li>
+        <li><strong>Migrations:</strong> hand-written SQL, applied through Supabase, kept in <code>packages/db/drizzle</code> with the reasoning in comments — including why a column was renamed rather than dropped.</li>
+        <li><strong>Error philosophy:</strong> a step that could not run never looks like a step that ran fine. Failures are written to the record with their reason and surfaced on the screen the operator pressed the button on.</li>
+        <li><strong>Accessibility and contrast:</strong> body text at 12.9:1 and small print at 9:1 against the page — measured, not eyeballed, after the operator reported grey text twice.</li>
+        <li><strong>Documentation in place:</strong> non-obvious decisions are commented where they live; the &ldquo;How it works&rdquo; screen renders the product's own rules for the operator.</li>
+      </ul>
+    </section>
+
+    <!-- 12 ----------------------------------------------------------------->
+    <section id="devops">
+      <h2><span class="num">12</span> DevOps and operations</h2>
+
+      <h3>Environments</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th></th><th>Web</th><th>Worker</th><th>Database</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Local</strong></td><td><code>next dev</code> on :3000</td><td><code>trigger dev</code>, development key</td><td>Shared Supabase project</td></tr>
+            <tr><td><strong>Production</strong></td><td>Vercel, region <code>bom1</code></td><td>Trigger.dev cloud, production key</td><td>Supabase <code>ap-south-1</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Trigger.dev environments are sealed from each other — a development key can only reach the
+        local worker — but both share one database, so work started locally is visible in the
+        deployed app. That is documented for the operator, because it also means local testing
+        changes production data.
+      </p>
+
+      <h3>Deployment</h3>
+      <ul>
+        <li><strong>Web:</strong> push to <code>main</code> on GitHub → Vercel builds and promotes. The build runs the workspace package build first (<code>prebuild</code>), so a type error in shared code fails the deploy rather than reaching production.</li>
+        <li><strong>Worker:</strong> <code>npm run deploy --workspace=@lead-intel/jobs</code> builds a container image (Playwright pinned to 1.57.0 for the image's browser check) and rolls out a new version on Trigger.dev.</li>
+        <li><strong>Database:</strong> migrations applied deliberately and separately, before the code that needs them.</li>
+        <li><strong>Rollback:</strong> Vercel keeps previous deployments; Trigger.dev keeps previous worker versions; migrations are written to be additive where possible.</li>
+      </ul>
+
+      <h3>Performance engineering</h3>
+      <p>
+        The most recent operational fix is a good example of the class of problem this stack has:
+        pages took 2–3 seconds because the Vercel functions ran in <code>iad1</code> (Washington)
+        while the database sits in <code>ap-south-1</code> (Mumbai) — every query crossed the world.
+        Pinning the functions to <code>bom1</code> through <code>vercel.json</code> put server work
+        at roughly 100–160&nbsp;ms. The leads list was separately paginated to 50 rows, cutting a
+        21,000-pixel page to a sixth of its height.
+      </p>
+
+      <h3>Secrets and security</h3>
+      <ul>
+        <li>Row-level security on every table; the web app acts as the signed-in user, never as an admin.</li>
+        <li>The Supabase service-role key exists only in the worker's environment and in Trigger.dev's production environment — never in the web app, never in the browser, never in the repository.</li>
+        <li><code>.env</code> files are git-ignored by name as well as by pattern; the example file carries names only.</li>
+        <li>Screenshots live in a private bucket and are served through short-lived signed URLs.</li>
+        <li>Recordings and other large media are ignored by the repository.</li>
+      </ul>
+
+      <h3>Observability and control</h3>
+      <ul>
+        <li>Every job writes progress, a running cost and a human sentence into <code>job_runs</code>; the operator sees it on any screen and can stop it.</li>
+        <li>Trigger.dev's own dashboard carries logs and run history per task.</li>
+        <li>The money ledger is the single source for every cost figure in the product — nothing is estimated in the interface.</li>
+      </ul>
+    </section>
+
+    <!-- 13 ----------------------------------------------------------------->
+    <section id="team">
+      <h2><span class="num">13</span> Roles and skills involved</h2>
+      <p>What building and running this platform actually requires, in the terms a company hiring for it would use.</p>
+      <div class="grid two">
+        <div class="card">
+          <h4>Full-stack engineering</h4>
+          <p>TypeScript across the whole stack; Next.js App Router with server components and server actions; hand-written CSS with a token system; PostgreSQL schema design; ORM and query work; REST integration with six external providers.</p>
+        </div>
+        <div class="card">
+          <h4>Backend / distributed jobs</h4>
+          <p>Idempotent background tasks, batching, cancellation, progress reporting, retry and quota handling, provider failure taxonomy, ledger-backed spend control.</p>
+        </div>
+        <div class="card">
+          <h4>Data engineering</h4>
+          <p>Entity resolution and merge rules across four identity keys, evidence-preserving schema design, CSV ingestion with duplicate detection, a scoring model with documented weights and thresholds.</p>
+        </div>
+        <div class="card">
+          <h4>DevOps</h4>
+          <p>Vercel and Trigger.dev deployments, region placement against database latency, environment and secret separation, container image builds for the worker, migration sequencing, rollback paths.</p>
+        </div>
+        <div class="card">
+          <h4>Web scraping and rendering</h4>
+          <p>Politeness and robots handling, resilient fetching, HTML parsing, headless Chromium rendering, layout measurement, screenshot capture and private storage.</p>
+        </div>
+        <div class="card">
+          <h4>Applied AI</h4>
+          <p>Prompt design with strict JSON contracts, defensive parsing, cost accounting per call, and — the part that matters most here — drawing the line between what a model may suggest and what only measurement may decide.</p>
+        </div>
+        <div class="card">
+          <h4>Product and UX</h4>
+          <p>Wireframes for 27 screens, a three-step worklist, a no-JavaScript interaction model, hover help on every control, and an explicit stance that unknown data must never be shown as a negative answer.</p>
+        </div>
+        <div class="card">
+          <h4>Compliance awareness</h4>
+          <p>Outreach rules per channel, TCPA exposure on mobile numbers, and a documented list of data that cannot be obtained legally or at all.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 14 ----------------------------------------------------------------->
+    <section id="state">
+      <h2><span class="num">14</span> Current state and roadmap</h2>
+
+      <h3>Live today</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Area</th><th>State</th></tr></thead>
+          <tbody>
+            <tr><td>Sourcing — Google Maps, CSV, manual</td><td>Live; 12 searches run so far</td></tr>
+            <tr><td>Crawling, 64 checks, scoring, routes</td><td>Live; 17,943 findings across 422 businesses</td></tr>
+            <tr><td>Browser page reads and critiques</td><td>Live; 347 pages read</td></tr>
+            <tr><td>ICPs with conditions and search words</td><td>Live; 5 ICPs, 200 businesses matched</td></tr>
+            <tr><td>Checklists</td><td>Live; 12 rules measured against every read page</td></tr>
+            <tr><td>Enrichment — Places, Instagram, Meta ads</td><td>Live; 326 paid calls, $5.39 total</td></tr>
+            <tr><td>Call logging and outcome capture</td><td>Live; the feedback loop that will tune the weights</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Built, priced, and deliberately switched off</h3>
+      <ul>
+        <li><strong>Owner's mobile (Lusha, 73¢):</strong> integrated in the pricing model and the confirm screen, disabled pending a compliance review.</li>
+        <li><strong>Website traffic estimates (DataForSEO, 0.12¢):</strong> awaiting a key.</li>
+        <li><strong>Budget and revenue filters:</strong> visible, switched off, with the reason on hover — no provider publishes the data.</li>
+      </ul>
+
+      <h3>Next</h3>
+      <ul>
+        <li>Enough logged call outcomes to tune the check weights and the gate against real replies rather than estimates.</li>
+        <li>Finding a business's Google listing from a name alone, for imported rows that arrive without one — currently 123 businesses cannot be scored on the reputation and local-search areas because a spreadsheet carries no <code>place_id</code>.</li>
+        <li>Rolling the remaining screens onto the new three-step interaction model.</li>
+      </ul>
+
+      <div class="note">
+        <p>
+          <strong>The measure of this platform is not how much data it holds.</strong> It is that
+          every number on a record can be traced to the page, listing or account it came from, that
+          every pound spent was authorised on a screen that showed the price first, and that nothing
+          the system does not know is ever presented as something it does.
+        </p>
+      </div>
+    </section>
+
+    <footer class="doc">
+      Lead Intel · platform documentation v1.0 · AheadTech360 · figures taken from the production
+      database on 21 September 2026.
+    </footer>
+  </main>
+</div>

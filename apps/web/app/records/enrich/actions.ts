@@ -11,7 +11,9 @@ import { tasks } from "@trigger.dev/sdk";
 import { redirect } from "next/navigation";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
 import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
+import { budgetFor, canAfford } from "@/lib/budget";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
 
 /**
  * The most businesses a source may be bought for in one submission.
@@ -92,6 +94,24 @@ export async function buyEnrichment(formData: FormData): Promise<void> {
     Number.isFinite(capDollars) && capDollars > 0
       ? Math.round(capDollars * 100)
       : DEFAULT_ENRICHMENT_SPEND_CAP_CENTS;
+
+  /**
+   * The budget, checked before anything is queued.
+   *
+   * The cap on this form is what the *run* may spend; the budget is what this *person* may spend,
+   * and the stricter of the two wins. Checked against the cap rather than the estimate because the
+   * cap is the real ceiling — a run stops at it, so it is the most this purchase can cost.
+   *
+   * Refused here means refused: no job row, no task, nothing bought. The screen already said the
+   * same thing, and saying it twice is deliberate — a form can be submitted from a page that was
+   * rendered before the allowance changed.
+   */
+  const viewer = await getViewer();
+  if (viewer) {
+    const budget = await budgetFor(viewer);
+    const verdict = canAfford(budget, capCents);
+    if (!verdict.ok) redirect(back(verdict.why));
+  }
 
   const jobRunId = await startJobRun(supabase, {
     kind: "enrich-run",

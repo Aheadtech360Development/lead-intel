@@ -1,8 +1,10 @@
 import { ENRICHMENT_DEFINITIONS } from "@lead-intel/shared";
 import { businesses, describeDbError, fieldMetadata, type Database } from "@lead-intel/db";
+import { runInstagramChecks } from "@lead-intel/core";
 import { fetchInstagramProfile, isInstagramOk, isApifyFatal } from "@lead-intel/providers";
 import { and, eq } from "drizzle-orm";
 import { upsertFieldMetadata } from "./field-metadata.js";
+import { upsertFindings } from "./findings.js";
 import { recordProviderCall } from "./provider-calls.js";
 import { scoreAndStore } from "./scoring.js";
 
@@ -110,6 +112,30 @@ export async function instagramBusiness(db: Database, businessId: string): Promi
 
   try {
     await upsertFieldMetadata(db, businessId, fields);
+
+    /**
+     * What this purchase can and cannot answer, written down as findings.
+     *
+     * O5 ("Instagram has gone quiet") and N5 ("posted on social in the last 30 days") both need
+     * post **dates**, and the profile actor this product buys returns counts without them. Before
+     * this, the two checks were simply absent from every record — so an operator who bought
+     * Instagram data saw the score sit still with nothing anywhere saying why.
+     *
+     * They now land as unmeasured, carrying that reason. It costs nothing, it makes the coverage
+     * number honest, and the day a source for post dates is connected these turn into real answers
+     * without anything else changing.
+     */
+    await upsertFindings(
+      db,
+      businessId,
+      runInstagramChecks({
+        profileFound: true,
+        followers: result.followersCount,
+        posts: result.postsCount,
+        lastPostAt: null,
+      }),
+      { sourceName: "apify_instagram" },
+    );
   } catch (err) {
     throw new Error(`failed to record Instagram for ${business.name}: ${describeDbError(err)}`);
   }

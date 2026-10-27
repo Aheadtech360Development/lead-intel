@@ -102,11 +102,31 @@ export async function auditSite(
   }
 
   try {
-    const home = await renderPage({
+    /**
+     * The home page gets a second attempt, and only the home page.
+     *
+     * A timeout here does not cost one page — it costs the whole site, because every other page is
+     * found by following links from this one. "The home page could not be read" was being written
+     * about ninjatransfers.com, a busy working business, after a single slow load.
+     *
+     * `renderPage` already retries an address that will not resolve; a timeout is the other kind
+     * worth one more go, and this is the one place where it is worth the thirty-five seconds. The
+     * remaining pages are not retried: losing one of six is a gap, losing the first is the lot.
+     */
+    let home = await renderPage({
       browser: started.session.browser,
       url: homeUrl,
       screenshot: true,
     });
+
+    if (home.outcome === "timeout") {
+      await progress?.say(`${new URL(homeUrl).hostname} was slow — trying once more`);
+      home = await renderPage({
+        browser: started.session.browser,
+        url: homeUrl,
+        screenshot: true,
+      });
+    }
 
     let screenshotsStored = 0;
     let screenshotProblem: string | null = null;

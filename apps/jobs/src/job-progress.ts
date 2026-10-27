@@ -54,9 +54,15 @@ export function jobProgress(db: Database, jobRunId: string | null | undefined): 
     };
   }
 
+  /**
+   * Every report stamps `updated_at`, which is what makes "still working" checkable.
+   *
+   * Set here rather than at each call site so a new kind of progress write cannot forget it — the
+   * one that forgot would be exactly the long job whose banner the operator ends up staring at.
+   */
   const set = async (values: Record<string, unknown>): Promise<void> => {
     try {
-      await db.update(jobRuns).set(values).where(eq(jobRuns.id, jobRunId));
+      await db.update(jobRuns).set({ ...values, updatedAt: new Date() }).where(eq(jobRuns.id, jobRunId));
     } catch {
       // Deliberately silent. See the note above.
     }
@@ -75,6 +81,7 @@ export function jobProgress(db: Database, jobRunId: string | null | undefined): 
             // Incremented in SQL rather than read-modify-written, so two workers on the same job
             // cannot lose a count between them.
             status: "running",
+            updatedAt: new Date(),
             done: sql`${jobRuns.done} + 1`,
             ...(step === undefined ? {} : { step }),
             ...(addCostCents === undefined

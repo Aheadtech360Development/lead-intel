@@ -127,7 +127,26 @@ describe("runListingChecks — structural", () => {
   it("returns each check exactly once", () => {
     const ids = runListingChecks(listing()).map((r) => r.checkId);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids.sort()).toEqual(["R1", "R2", "R3", "R4", "R5", "S1", "S2", "S3", "S4", "S5", "S6"]);
+    // The four N-family ids are the paid intent checks that live on the same listing. They are
+    // always unmeasured — Google answers none of them for this key — but they are returned rather
+    // than omitted, so the record can say so instead of leaving the Intent score quietly shorter.
+    expect(ids.sort()).toEqual([
+      "N3",
+      "N4",
+      "N7",
+      "N8",
+      "R1",
+      "R2",
+      "R3",
+      "R4",
+      "R5",
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5",
+      "S6",
+    ]);
   });
 
   it("keeps points and maxPoints consistent with the outcome", () => {

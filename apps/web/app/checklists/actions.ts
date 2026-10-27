@@ -4,6 +4,7 @@ import { CHECKABLE_FIELDS, EXAMPLE_CHECKLIST_RULES, TESTS } from "@lead-intel/co
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/viewer";
 
 /**
  * Editing what a good page looks like.
@@ -19,6 +20,7 @@ function optionalNumber(value: FormDataEntryValue | null): number | null {
 }
 
 export async function saveChecklistRule(formData: FormData): Promise<void> {
+  await requireAdmin("/checklists");
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
@@ -77,6 +79,7 @@ export async function saveChecklistRule(formData: FormData): Promise<void> {
 }
 
 export async function deleteChecklistRule(formData: FormData): Promise<void> {
+  await requireAdmin("/checklists");
   const id = String(formData.get("id") ?? "");
   if (id) {
     const supabase = await createClient();
@@ -88,6 +91,7 @@ export async function deleteChecklistRule(formData: FormData): Promise<void> {
 
 /** Seeds the starter set, so the first visit is never a blank form. */
 export async function addExampleChecklists(): Promise<void> {
+  await requireAdmin("/checklists");
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;

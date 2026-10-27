@@ -22,8 +22,24 @@ export interface ListingEvidence {
   allTypes: string[];
   /** The website the listing points at, if any. */
   websiteUri: string | null;
+  /**
+   * Whether the source was asked about a website link at all.
+   *
+   * `false` means "we do not know", which is not the same as a listing with no link — and S6 fires
+   * 30 points on the difference. Only a source that genuinely reports the field may let S6 fire.
+   */
+  websiteKnown?: boolean;
   rating: number | null;
   reviewCount: number | null;
+  /**
+   * Whether the source carried categories at all.
+   *
+   * `false` for the free half of a Maps search result, which gives a rating and a review count and
+   * no types. Without this flag S5 reads "no category set" from a source that was never asked, and
+   * fires a 25-point problem at a business that may well be categorised perfectly — the exact
+   * shape of mistake the whole third-answer rule exists to prevent.
+   */
+  categoriesKnown?: boolean;
   /** Why nothing could be read, when nothing could. Shown to the operator verbatim. */
   unavailableReason?: string | null;
 }
@@ -71,6 +87,19 @@ export function runListingChecks(evidence: ListingEvidence | null): CheckResult[
     notMeasured("R3", "Google returns no individual reviews for this project's key, so review recency is unknown."),
     notMeasured("R4", "Google returns no individual reviews, and no owner-response field, so replies cannot be checked."),
     notMeasured("R5", "Google returns no review dates, so the rate of new reviews cannot be worked out."),
+
+    /**
+     * The four paid **intent** checks that live on the same listing, and fall for the same reasons.
+     *
+     * They were absent from every record rather than unmeasured, which is a worse answer than it
+     * sounds: absent, the Intent score silently had four fewer ways to be earned and nothing on
+     * screen said so. Written down, an operator who has bought a listing can see exactly which
+     * questions that purchase answered and which Google will not answer at any price.
+     */
+    notMeasured("N3", "Google returns no review dates for this project's key, so whether a review arrived in the last 30 days is unknown."),
+    notMeasured("N4", "Google returns no review dates, so the rate of new reviews cannot be worked out."),
+    notMeasured("N7", "Google's API does not report whether a listing is claimed — it is visible only in the Maps interface."),
+    notMeasured("N8", "A Places lookup answers for one location at a time, so it cannot say whether this business has others."),
   ];
 
   if (!evidence) {
@@ -125,9 +154,11 @@ export function runListingChecks(evidence: ListingEvidence | null): CheckResult[
 
     categoryCheck(evidence),
 
-    evidence.websiteUri === null
-      ? fired("S6", "The Google listing has no website link, so everyone who finds the listing stops there.")
-      : passed("S6", `The Google listing links to ${evidence.websiteUri}.`, { websiteUri: evidence.websiteUri }),
+    evidence.websiteUri !== null
+      ? passed("S6", `The Google listing links to ${evidence.websiteUri}.`, { websiteUri: evidence.websiteUri })
+      : evidence.websiteKnown === false
+        ? notMeasured("S6", "This source does not say whether the listing carries a website link.")
+        : fired("S6", "The Google listing has no website link, so everyone who finds the listing stops there."),
 
     reviewCountCheck(evidence),
     ratingCheck(evidence),
@@ -138,6 +169,12 @@ export function runListingChecks(evidence: ListingEvidence | null): CheckResult[
 
 /** S5: "Missing or generic". A listing typed only `point_of_interest` tells a searcher nothing. */
 function categoryCheck(evidence: ListingEvidence): CheckResult {
+  if (evidence.categoriesKnown === false) {
+    return notMeasured(
+      "S5",
+      "This came from a Maps search result, which carries the rating and review count but no categories. Buying the full listing would answer it.",
+    );
+  }
   const primary = evidence.primaryType;
   if (primary === null && evidence.allTypes.length === 0) {
     return fired("S5", "The Google listing has no category set, so it will not appear in searches for what this business does.");

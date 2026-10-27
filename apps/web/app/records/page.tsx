@@ -1,7 +1,9 @@
+import { checkednessFromAreas } from "@lead-intel/core";
 import { BUSINESS_ORIGIN_LABELS, BUSINESS_ORIGINS, type BusinessOrigin } from "@lead-intel/shared";
 import Link from "next/link";
 import { leadTint, loadSocialFacts, matchesFilters, type LeadRow, type LeadTint } from "@/lib/lead-filters";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer, leadScope } from "@/lib/viewer";
 import { signOut } from "../actions";
 import {
   AppShell, Banner,
@@ -143,6 +145,15 @@ const WHOLE_LIST_JOBS: {
  */
 
 interface Filters {
+  /**
+   * "1" while the filter drawer is open.
+   *
+   * It lives in `Filters` rather than beside it so that every link `href()` builds inside the
+   * drawer carries it automatically — choosing a filter keeps the drawer open, which is what makes
+   * a panel of sections usable at all. Clicking a chip out in the page carries it too, and that is
+   * harmless: the chip is only reachable when the drawer is already shut.
+   */
+  filters?: string;
   view?: string;
   tier?: string;
   route?: string;
@@ -205,30 +216,39 @@ interface PageParams extends Filters {
 /**
  * One filter, as a menu that opens over the page.
  *
- * `<details>` and nothing else: it opens, closes, and closes on Escape without a line of
- * JavaScript, and because the panel is absolutely positioned the table below does not move when
- * one is opened. The summary carries the chosen value, so a closed menu still says what it is
- * doing.
+ * **One drawer, not eleven dropdowns.** The first version gave each filter a `<details>` menu of
+ * its own along a bar, which was honest about state and wrong about shape: eleven closed menus
+ * read as eleven unrelated buttons, only one could be open at a time, and the row wrapped onto
+ * three lines on a laptop. The approved design puts all of them in a single panel that slides in
+ * from the right, so filtering is one place you go rather than eleven you hunt through.
+ *
+ * Still no JavaScript. The drawer is a URL — `?filters=1` — so it survives a navigation, can be
+ * linked to, and closes by going back. Every control inside is a link that keeps `filters=1` on,
+ * which is why the state lives in `Filters`.
  */
 function Menu({
   label,
   value,
-  right,
   children,
 }: {
   label: string;
   value?: string | null;
+  /** Kept for call sites written against the old bar; a drawer has no left or right. */
   right?: boolean;
   children: React.ReactNode;
 }) {
+  /**
+   * The heading comes from the `FilterSection` inside, not from here.
+   *
+   * On the old bar this component drew the name, because a closed dropdown had to say what it was.
+   * In a panel every section is already open and already titled, so drawing it again printed
+   * "Priority" twice, one line apart. What is left is the one thing a title does not say: whether
+   * anything in this group is on, which marks the group's edge so a filled panel can be scanned.
+   */
   return (
-    <details className={right ? "fmenu fmenu-right" : "fmenu"}>
-      <summary data-on={value ? "1" : undefined}>
-        {label}
-        {value ? <>: {value}</> : null}
-      </summary>
-      <div className="fmenu-panel">{children}</div>
-    </details>
+    <section className="fgroup" data-on={value ? "1" : undefined} aria-label={label}>
+      {children}
+    </section>
   );
 }
 
@@ -320,18 +340,30 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     ...(params.claimed && params.claimed !== "all" ? { claimed: params.claimed } : {}),
     ...(params.sort && params.sort !== "all" ? { sort: params.sort } : {}),
     ...(params.all === "1" ? { all: "1" } : {}),
+    ...(params.filters === "1" ? { filters: "1" } : {}),
   };
 
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const claims = claimsData?.claims;
+  const viewer = await getViewer();
+
+  /**
+   * Whose list this is.
+   *
+   * An administrator sees everything, because handing leads out means seeing what there is to hand
+   * out. A member sees their own — which today means the ones they have claimed, since claiming is
+   * the only ownership the database has. Assignment is specified and not built; when it lands,
+   * `leadScope` changes and this page does not. The filter is applied to the query, not to the
+   * rendered rows, so every count on the screen is a count of what they can actually see.
+   */
+  const scope = viewer ? leadScope(viewer) : null;
+  const claims = viewer ? { sub: viewer.id, email: viewer.email } : null;
 
   // The whole active set, once. A few hundred rows is small enough that filtering and counting in
   // memory is simpler and cheaper than a round-trip per filter, and it keeps every count in the
   // sidebar guaranteed consistent with the rows beside it.
   // In the batch below rather than before it. On its own it was a sequential round trip — about
   // 60ms to Supabase — bought for nothing, since it does not depend on any of them.
-  const businessesQuery = supabase
+  let businessesQuery = supabase
     .from("businesses")
     .select(
       "id, display_name, city, state, website_status, tier, problem_score, intent_score, route, route_reason, claim_status, claimed_by, passed_gate, manual_review_status, origin, import_batch_id, icp_name, icp_id, scored_at",
@@ -339,6 +371,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     .eq("status", "active")
     .order("tier", { ascending: true, nullsFirst: false })
     .order("problem_score", { ascending: false, nullsFirst: false });
+  if (scope) businessesQuery = businessesQuery.eq(scope.column, scope.value);
 
   const [{ data: all, error }, { data: contactRows }, { data: spendTotal }, { data: batchRows }, social] =
     await Promise.all([
@@ -462,12 +495,37 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
       if (name.length > 0) placeCounts.set(name, (placeCounts.get(name) ?? 0) + 1);
     }
   }
+  /** The filter drawer is a URL, so it survives a navigation and can be closed by going back. */
+  const filtersOpen = params.filters === "1";
+
   const PAGE_SIZE = 50;
   const pageCount = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
   const safePage = Math.min(pageNo, pageCount);
   const pageRows = shown.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
   const firstShown = shown.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const lastShown = (safePage - 1) * PAGE_SIZE + pageRows.length;
+
+  /**
+   * How much of each business on **this page** has actually been checked.
+   *
+   * A second query, for fifty ids, rather than a column on the first one: `area_scores` is a
+   * json object of about 800 bytes and the list reads every active business to count its filters,
+   * so carrying it there would add half a megabyte to a page the operator already reported as
+   * slow. Fifty of them is nothing.
+   *
+   * It is here because a score with nothing behind it was indistinguishable from a score with
+   * forty measurements behind it — see packages/core/src/scoring/coverage.ts.
+   */
+  const checkedBy = new Map<string, ReturnType<typeof checkednessFromAreas>>();
+  if (pageRows.length > 0) {
+    const { data: areaRows } = await supabase
+      .from("businesses")
+      .select("id, area_scores")
+      .in("id", pageRows.map((row) => row.id));
+    for (const row of areaRows ?? []) {
+      checkedBy.set(row.id as string, checkednessFromAreas((row as { area_scores: unknown }).area_scores));
+    }
+  }
   const pageHref = (n: number) => {
     const base = href(current, {});
     return `${base}${base.includes("?") ? "&" : "?"}page=${n}`;
@@ -557,14 +615,21 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     <AppShell
       wide
       current="leads"
-      email={typeof claims?.email === "string" ? claims.email : null}
+      email={viewer?.email ?? null}
       signOutAction={signOut}
-      title="Leads"
+      title={viewer?.isAdmin ? "Leads" : "My leads"}
       what={
-        <>
-          Your call list, best call first. Three steps: choose businesses, tick the ones you want,
-          then act on them.
-        </>
+        viewer?.isAdmin ? (
+          <>
+            The call list, best call first. Three steps: choose businesses, tick the ones you want, then act on
+            them.
+          </>
+        ) : (
+          <>
+            Your call list, best call first — yours and nobody else&rsquo;s. Three steps: choose businesses, tick the
+            ones you want, then act on them.
+          </>
+        )
       }
       actions={
         // One menu rather than three buttons: all three answer the same question — how do I get
@@ -653,11 +718,13 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
           the address carries exactly those.
         */}
         <form id="lead-pick" method="get" action="/records" />
-        {Object.entries(current).map(([key, value]) => (
-          <input key={`pick-${key}`} type="hidden" form="lead-pick" name={key} value={String(value)} />
-        ))}
         {Object.entries(current)
-          .filter(([key]) => key !== "q")
+          .filter(([key]) => key !== "filters")
+          .map(([key, value]) => (
+            <input key={`pick-${key}`} type="hidden" form="lead-pick" name={key} value={String(value)} />
+          ))}
+        {Object.entries(current)
+          .filter(([key]) => key !== "q" && key !== "filters")
           .map(([key, value]) => (
             <input key={key} type="hidden" form="lead-search" name={key} value={String(value)} />
           ))}
@@ -718,7 +785,93 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
               ) : null}
             </div>
 
+            {/*
+              One button, and what is on beneath it.
+
+              The design asked for a single Filters control rather than a row of eleven menus, and
+              the live screen had drifted back to the row. The count on the button is the part that
+              makes a closed panel honest: a filter you cannot see is a filter you forget is on.
+            */}
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <Link
+                href={href(current, { filters: "1" })}
+                className="btn secondary"
+                data-tip="Every way of narrowing the list, in one panel: who they are, what is wrong, where they are, and where they came from."
+              >
+                <svg viewBox="0 0 24 24" aria-hidden>
+                  <path d="M4 6h16M7 12h10M10 18h4" />
+                </svg>
+                Filters
+                {chips.length > 0 ? <span className="badge accent">{chips.length}</span> : null}
+              </Link>
+
+              <Link
+                href={href(current, { sort: current.sort === "colour" ? "" : "colour" })}
+                className="btn secondary"
+                data-tip={
+                  current.sort === "colour"
+                    ? "Back to ordering by priority and Problem score."
+                    : "Group the rows by colour, so the same kind of lead sits together."
+                }
+              >
+                {current.sort === "colour" ? "Ordered by colour" : "Group by colour"}
+              </Link>
+
+              <span style={{ marginLeft: "auto", fontSize: 15.5, fontWeight: 600 }}>
+                {shown.length} of {rows.length} businesses
+              </span>
+            </div>
+
+            {/* What is on, as chips. Each one removes only itself; Clear all removes the lot. */}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink-3)" }}>Showing:</span>
+              {chips.length === 0 ? (
+                <span style={{ fontSize: 13.5, color: "var(--ink-3)" }}>everything worth calling — no filters on</span>
+              ) : (
+                chips.map((chip) => (
+                  <Link key={chip.label} href={chip.remove} className="fchip" title={`Remove: ${chip.label}`}>
+                    {chip.label} <span aria-hidden>✕</span>
+                  </Link>
+                ))
+              )}
+              {chips.length > 1 && (
+                <Link href={href({ ...(view !== "ready" ? { view } : {}) }, {})} style={{ fontSize: 13.5 }}>
+                  Clear all
+                </Link>
+              )}
+            </div>
+
+            {/*
+              ---- The drawer ------------------------------------------------------------
+
+              Rendered only when it is open, so a closed drawer is not a hidden panel sitting in
+              the page waiting to be tabbed into. The scrim behind it is a link: clicking anywhere
+              outside closes it, which is what people expect of a drawer and costs no JavaScript.
+            */}
+            {filtersOpen ? (
+              <>
+                <Link
+                  href={href(current, { filters: "" })}
+                  className="scrim"
+                  data-open="1"
+                  aria-label="Close filters"
+                />
+                <aside className="drawer" data-open="1" aria-label="Filters">
+                  <header>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h3>Filters</h3>
+                      <p>
+                        {shown.length} of {rows.length} businesses match
+                      </p>
+                    </div>
+                    <Link href={href(current, { filters: "" })} className="iconbtn" aria-label="Close">
+                      <svg viewBox="0 0 24 24" aria-hidden>
+                        <path d="m6 6 12 12M18 6 6 18" />
+                      </svg>
+                    </Link>
+                  </header>
+
+                  <div className="body">
 
             <Menu label="Show" value={view === "ready" ? "Worth calling" : view === "unanalysed" ? "Not analysed" : "Everything"}>
             <FilterSection title="Show" hint="Which businesses appear at all.">
@@ -985,40 +1138,23 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
             >
               Revenue <b>off</b>
             </span>
-            </div>
+                  </div>
 
-            {/* What is on, as chips. Each one removes only itself; Clear all removes the lot. */}
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-                flexWrap: "wrap",
-                borderTop: "1px solid var(--rule-2)",
-                paddingTop: 12,
-              }}
-            >
-              <span style={{ fontSize: 14.5, fontWeight: 700 }}>Showing:</span>
-              {chips.length === 0 ? (
-                <span style={{ fontSize: 14.5, color: "var(--ink-3)" }}>
-                  everything worth calling — no filters on
-                </span>
-              ) : (
-                chips.map((chip) => (
-                  <Link key={chip.label} href={chip.remove} className="fchip" title={`Remove: ${chip.label}`}>
-                    {chip.label} <span aria-hidden>✕</span>
-                  </Link>
-                ))
-              )}
-              {chips.length > 1 && (
-                <Link href={href({ ...(view !== "ready" ? { view } : {}) }, {})} style={{ fontSize: 14.5 }}>
-                  Clear all
-                </Link>
-              )}
-              <span style={{ marginLeft: "auto", fontSize: 16, fontWeight: 700 }}>
-                {shown.length} of {rows.length} businesses
-              </span>
-            </div>
+                  <footer>
+                    <Link
+                      href={href({ ...(view !== "ready" ? { view } : {}), filters: "1" }, {})}
+                      className="btn ghost"
+                    >
+                      Clear all
+                    </Link>
+                    <span className="spacer" />
+                    <Link href={href(current, { filters: "" })} className="btn">
+                      Show {shown.length} {shown.length === 1 ? "lead" : "leads"}
+                    </Link>
+                  </footer>
+                </aside>
+              </>
+            ) : null}
           </section>
 
           <div style={{ minWidth: 0 }}>
@@ -1033,11 +1169,45 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
 
             {error && <p style={{ color: "var(--warn-ink)" }}>Could not load the list: {error.message}</p>}
 
-            {!error && shown.length === 0 && (
+            {/*
+              Two empty states, and collapsing them is the worst thing this screen could do.
+
+              "Nothing matches" means the filters are too tight. "You have not been given any
+              leads yet" means the list itself is empty — nothing has gone wrong, nothing is
+              filtered, there is simply nothing here yet. A salesperson told the first when the
+              second is true will spend their morning taking filters off an empty list.
+            */}
+            {!error && shown.length === 0 && rows.length === 0 && (
+              <div style={{ ...PANEL, padding: "56px 24px", textAlign: "center", color: "var(--ink-3)" }}>
+                <h3 style={{ color: "var(--ink)", fontSize: 20.5, margin: "0 0 8px" }}>
+                  {viewer?.isAdmin ? "There are no businesses yet" : "You have not been given any leads yet"}
+                </h3>
+                <p style={{ maxWidth: 520, margin: "0 auto 16px", fontSize: 15.5, lineHeight: 1.55 }}>
+                  {viewer?.isAdmin
+                    ? "Nothing has been added. A Maps search finds new businesses and costs money per search; importing a list and adding one by hand are both free."
+                    : "Your list is empty because nothing has been handed to you — not because anything went wrong or is filtered out. You can bring in your own list in the meantime, and that is free."}
+                </p>
+                <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                  <Link href="/records/import" className="btn" style={{ textDecoration: "none" }}>
+                    Import a list
+                  </Link>
+                  <Link href="/records/new" className="btn-2 btn" style={{ textDecoration: "none" }}>
+                    Add one by hand
+                  </Link>
+                  {viewer?.isAdmin ? (
+                    <Link href="/search" className="btn-2 btn" style={{ textDecoration: "none" }}>
+                      Search Google Maps
+                    </Link>
+                  ) : null}
+                </div>
+              </div>
+            )}
+
+            {!error && shown.length === 0 && rows.length > 0 && (
               <div style={{ ...PANEL, padding: "56px 24px", textAlign: "center", color: "var(--ink-3)" }}>
                 <h3 style={{ color: "var(--ink)", fontSize: 20.5, margin: "0 0 8px" }}>Nothing matches</h3>
                 <p style={{ maxWidth: 460, margin: "0 auto 14px", fontSize: 15.5 }}>
-                  No business fits every filter on the left at once.
+                  None of your {rows.length.toLocaleString()} businesses fits every filter at once.
                 </p>
                 {anyFilter && (
                   <Link href={href({ ...(view !== "ready" ? { view } : {}) }, {})} className="btn-2 btn" style={{ textDecoration: "none" }}>
@@ -1169,7 +1339,10 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                   </span>
                 </div>
 
-                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1290, tableLayout: "fixed" }}>
+                <table
+                  className="leadtable"
+                  style={{ width: "100%", borderCollapse: "collapse", minWidth: 1290, tableLayout: "fixed" }}
+                >
                   <thead style={{ background: "var(--surface-2)" }}>
                     <tr>
                       {/*
@@ -1271,7 +1444,11 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                                 {seen ? "Not scored" : "Not analysed"}
                               </span>
                             ) : (
-                              <ScoreBars problem={b.problem_score} intent={b.intent_score} />
+                              <ScoreBars
+                                problem={b.problem_score}
+                                intent={b.intent_score}
+                                checked={checkedBy.get(b.id)}
+                              />
                             )}
                           </td>
                           <td style={TD}>
@@ -1342,6 +1519,88 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                     })}
                   </tbody>
                 </table>
+
+                {/*
+                  The same fifty rows, for a phone.
+
+                  Not the table shrunk — a table with nine columns and a 1290px minimum is a
+                  sideways-scrolling strip on a phone, and the thing a salesperson needs there is
+                  not nine columns. It is: who, how urgent, what to sell, how bad, and a way in.
+                  Everything else stays on the lead itself, one tap away.
+
+                  Rendered twice rather than transformed with CSS, because `display: block` on a
+                  table cell throws away the semantics a screen reader uses and this list is the
+                  product's spine.
+                */}
+                <div className="leadcards">
+                  {pageRows.map((b) => {
+                    const isMine = claims?.sub && b.claimed_by === claims.sub;
+                    const seen = b.scored_at !== null;
+                    const tint = leadTint(b as unknown as LeadRow, social);
+                    return (
+                      <div key={b.id} className="leadcard" style={tint ? { background: ROW_TINT[tint] } : undefined}>
+                        <div className="leadcard-top">
+                          <TierBadge tier={b.tier} />
+                          <span style={{ minWidth: 0, flex: 1 }}>
+                            <Link href={`/records/${b.id}`} style={{ fontWeight: 650, fontSize: 16 }}>
+                              {b.display_name}
+                            </Link>
+                            <span style={{ display: "block", fontSize: 13.5, color: "var(--ink-2)", marginTop: 2 }}>
+                              {[b.city, b.state].filter(Boolean).join(", ") || "Location unknown"}
+                              {" · "}
+                              {seen ? (WEBSITE_LABELS[b.website_status] ?? b.website_status) : "not looked at yet"}
+                            </span>
+                          </span>
+                          <input
+                            type="checkbox"
+                            name="id"
+                            form="lead-pick"
+                            value={b.id}
+                            defaultChecked={current.all === "1" || tickedIds.includes(b.id)}
+                            aria-label={`Select ${b.display_name}`}
+                            style={{ width: 18, height: 18, cursor: "pointer", flex: "none" }}
+                          />
+                        </div>
+
+                        <div style={{ fontSize: 14.5 }}>
+                          {b.route ? (
+                            <>
+                              <b style={{ color: "var(--ink)" }}>{ROUTE_LABELS[b.route] ?? b.route}</b>
+                              {b.route_reason ? (
+                                <span style={{ color: "var(--ink-2)" }}> — {b.route_reason}</span>
+                              ) : null}
+                            </>
+                          ) : (
+                            <span style={{ color: "var(--ink-2)" }}>
+                              {seen ? "Nothing solid enough to name" : "Nobody has looked at this yet"}
+                            </span>
+                          )}
+                        </div>
+
+                        {b.problem_score === null && b.intent_score === null ? null : (
+                          <ScoreBars problem={b.problem_score} intent={b.intent_score} checked={checkedBy.get(b.id)} />
+                        )}
+
+                        <div className="leadcard-foot">
+                          <Link href={`/records/${b.id}`} className="btn" style={{ textDecoration: "none", flex: 1 }}>
+                            Open
+                          </Link>
+                          {b.claim_status === "unclaimed" ? (
+                            <button className="btn-2 btn" type="submit" formAction={claimBusiness.bind(null, b.id)}>
+                              Claim
+                            </button>
+                          ) : isMine ? (
+                            <button className="btn-2 btn" type="submit" formAction={releaseClaim.bind(null, b.id)}>
+                              Release
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: 14, color: "var(--ink-2)", alignSelf: "center" }}>Taken</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
 
                 {/*
                   Fifty rows a page.
@@ -1482,7 +1741,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
 
                       <ActionRow
                         title="Analyse them"
-                        what="Reads their website, runs the 51 checks, measures their speed and scores them again. No provider is paid for any of it."
+                        what="Reads their website, runs the 64 checks, measures their speed and scores them again. No provider is paid for any of it."
                         cost="Free"
                         who="our own crawler and Google PageSpeed"
                         off={
@@ -1502,7 +1761,7 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
                           
                           className="btn"
                           disabled={tickedIds.length === 0}
-                          data-tip={tickedIds.length === 0 ? "Switched off because nothing is ticked. Close this panel, tick businesses in step 2, then press Choose what to do again." : "Reads the ticked businesses' websites, runs the 51 checks and scores them again. Free."}
+                          data-tip={tickedIds.length === 0 ? "Switched off because nothing is ticked. Close this panel, tick businesses in step 2, then press Choose what to do again." : "Reads the ticked businesses' websites, runs the 64 checks and scores them again. Free."}
                         >
                           Run on {tickedIds.length > 0 ? `these ${tickedIds.length}` : "the ticked"}
                         </button>
@@ -1625,3 +1884,4 @@ export default async function RecordsPage({ searchParams }: { searchParams: Prom
     </AppShell>
   );
 }
+

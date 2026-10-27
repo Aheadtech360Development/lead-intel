@@ -11,6 +11,7 @@ import {
 } from "@lead-intel/core";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
 import { signOut } from "../actions";
 import { AppShell, Badge, Banner, InfoBox, Note, PANEL, Panel, SectionHeading, TD, Th, StageStrip } from "../ui";
 import { addExampleChecklists, deleteChecklistRule, saveChecklistRule } from "./actions";
@@ -44,6 +45,9 @@ interface Params {
 export default async function ChecklistsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const supabase = await createClient();
+  const viewer = await getViewer();
+  /** Read-only for a member, by the same agreement that makes ICPs read-only. */
+  const canEdit = viewer?.isAdmin ?? false;
   const { data: claimsData } = await supabase.auth.getClaims();
   const claims = claimsData?.claims;
 
@@ -124,9 +128,11 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
       signOutAction={signOut}
       title="Checklists"
       actions={
-        <Link href="/checklists?add=1" className="btn" style={{ textDecoration: "none" }}>
-          + Add a rule
-        </Link>
+        canEdit ? (
+          <Link href="/checklists?add=1" className="btn" style={{ textDecoration: "none" }}>
+            + Add a rule
+          </Link>
+        ) : null
       }
       what={
         <>
@@ -152,6 +158,14 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
           </Banner>
         )}
 
+        {!canEdit ? (
+          <InfoBox title="You can read these, not change them" tone="info">
+            The administrator writes the checklists in their own words, and those exact words are what the model is
+            given along with each page. Nothing here carries a number or moves a score — the scored checks are a
+            separate thing entirely.
+          </InfoBox>
+        ) : null}
+
         {all.length === 0 && (
           <div style={{ ...PANEL, padding: "40px 24px", textAlign: "center" }}>
             <h3 style={{ fontSize: 20.5, margin: "0 0 8px" }}>No rules yet</h3>
@@ -160,11 +174,18 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
               five to particular kinds of page, and three assume your trade &mdash; those are the ones
               to rewrite first if you move into another.
             </p>
-            <form action={addExampleChecklists}>
-              <button className="btn" type="submit">
-                Start with twelve rules
-              </button>
-            </form>
+            {canEdit ? (
+              <form action={addExampleChecklists}>
+                <button className="btn" type="submit">
+                  Start with twelve rules
+                </button>
+              </form>
+            ) : (
+              <p style={{ fontSize: 14, color: "var(--ink-2)", margin: 0 }}>
+                The administrator writes these for the whole team. Until one exists, pages are read and measured but
+                not judged against anybody&rsquo;s idea of a good page.
+              </p>
+            )}
           </div>
         )}
 
@@ -228,10 +249,13 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
                           )}
                         </td>
                         <td style={TD}>
-                          <Link href={`/checklists?edit=${rule.id}`} style={{ fontSize: 15, marginRight: 10 }}>
+                          <Link
+                            href={`/checklists?edit=${rule.id}`}
+                            style={{ fontSize: 15, marginRight: 10, display: canEdit ? undefined : "none" }}
+                          >
                             Edit
                           </Link>
-                          <form action={deleteChecklistRule} style={{ display: "inline" }}>
+                          <form action={deleteChecklistRule} style={{ display: canEdit ? "inline" : "none" }}>
                             <input type="hidden" name="id" value={rule.id} />
                             <button
                               type="submit"
@@ -250,7 +274,7 @@ export default async function ChecklistsPage({ searchParams }: { searchParams: P
           </Panel>
         )}
 
-        {panelOpen && (
+        {panelOpen && canEdit && (
           <div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
             <Link
               href="/checklists"

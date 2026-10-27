@@ -4,6 +4,7 @@ import { runs } from "@trigger.dev/sdk";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { RAIL_COOKIE, railIsOpen } from "@/lib/rail";
+import { NEXT_THEME, readTheme, THEME_COOKIE, type Theme } from "@/lib/theme";
 import { createClient } from "@/lib/supabase/server";
 
 export async function signOut() {
@@ -49,6 +50,39 @@ export async function toggleRail(): Promise<void> {
    *
    * Other routes pick it up when they are next visited, which is exactly when they need it.
    */
+}
+
+/**
+ * Moves the product between light, dark and following-your-device.
+ *
+ * A cookie for the same reason the rail is a cookie: `AppShell` is rendered by each page rather
+ * than by the root layout, so anything held in the DOM is rebuilt — and lost — on every click.
+ * The cookie is read by the root layout, which stamps `data-theme` on <html>, so the first paint
+ * of a navigation is already in the right theme and nothing flashes.
+ *
+ * It takes the state it is moving **from**, rather than reading the cookie itself, so a stale tab
+ * cannot cycle the theme somewhere the operator did not press.
+ */
+export async function setTheme(formData: FormData): Promise<void> {
+  const from = readTheme(String(formData.get("from") ?? ""));
+  const asked = String(formData.get("to") ?? "");
+  const to: Theme = asked === "system" || asked === "light" || asked === "dark" ? asked : NEXT_THEME[from];
+
+  const jar = await cookies();
+  if (to === "system") {
+    jar.delete(THEME_COOKIE);
+  } else {
+    jar.set(THEME_COOKIE, to, {
+      path: "/",
+      // A year. A display preference, not a session.
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
+  }
+
+  // Nothing to revalidate: Next re-renders the current route once an action returns, and that
+  // render reads the cookie. Revalidating the layout would throw away the router cache for every
+  // route in the product and make the next click slow — see toggleRail above.
 }
 
 /**

@@ -18,6 +18,7 @@ import { redirect } from "next/navigation";
 import { enqueueBlockedBecause, explainEnqueueFailure } from "@/lib/enqueue";
 import { attachTriggerRun, failJobRun, startJobRun } from "@/lib/job-runs";
 import { createClient } from "@/lib/supabase/server";
+import { requireAdmin } from "@/lib/viewer";
 
 /**
  * Editing the rules that decide a business's category.
@@ -57,6 +58,7 @@ function optionalNumber(value: FormDataEntryValue | null): number | null {
  * per business still goes through the worker and the ledger, as it must.
  */
 export async function suggestRule(formData: FormData): Promise<void> {
+  await requireAdmin("/icps");
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   if (typeof data?.claims?.sub !== "string") redirect("/icps?error=You+are+not+signed+in.");
@@ -138,6 +140,7 @@ export async function suggestRule(formData: FormData): Promise<void> {
 }
 
 export async function saveRule(formData: FormData): Promise<void> {
+  await requireAdmin("/icps");
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
@@ -222,6 +225,7 @@ export async function saveRule(formData: FormData): Promise<void> {
 }
 
 export async function deleteRule(formData: FormData): Promise<void> {
+  await requireAdmin("/icps");
   const id = String(formData.get("id") ?? "");
   if (id) {
     const supabase = await createClient();
@@ -236,6 +240,7 @@ export async function deleteRule(formData: FormData): Promise<void> {
 
 /** Seeds the starter rules, so the first screen is never an empty form. */
 export async function addExampleRules(): Promise<void> {
+  await requireAdmin("/icps");
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;

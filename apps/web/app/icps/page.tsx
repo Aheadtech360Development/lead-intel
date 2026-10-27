@@ -2,6 +2,7 @@ import { ICP_SOURCE_LABELS, ICP_SOURCES, riskyTerms, type Icp } from "@lead-inte
 import Link from "next/link";
 import { previewRule, type RulePreview } from "@/lib/rule-preview";
 import { createClient } from "@/lib/supabase/server";
+import { getViewer } from "@/lib/viewer";
 import { signOut } from "../actions";
 import { refreshWebsiteText } from "../records/analyse-actions";
 import { AppShell, Banner, Badge, InfoBox, Note, PANEL, Panel, SectionHeading, TD, Th, StageStrip } from "../ui";
@@ -78,8 +79,17 @@ function optionalNumber(value: string | undefined): number | null {
 export default async function IcpsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const params = await searchParams;
   const supabase = await createClient();
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const claims = claimsData?.claims;
+  const viewer = await getViewer();
+  const claims = viewer ? { sub: viewer.id, email: viewer.email } : null;
+
+  /**
+   * Members read these; the administrator writes them.
+   *
+   * The agreed model (`specs/multi-user/spec.md` §2) makes ICPs read-only for a member, so that
+   * one lead means the same thing to everybody on the team. Applying them is left available,
+   * because matching is free, re-runnable and changes no rule — it only re-sorts.
+   */
+  const canEdit = viewer?.isAdmin ?? false;
 
   const [
     { data: rules },
@@ -202,13 +212,19 @@ export default async function IcpsPage({ searchParams }: { searchParams: Promise
     <AppShell
       autoRefresh={false}
       current="icps"
-      email={typeof claims?.email === "string" ? claims.email : null}
+      email={viewer?.email ?? null}
       signOutAction={signOut}
       title="ICPs"
       actions={
-        <Link href="/icps?add=1" className="btn" style={{ textDecoration: "none" }}>
-          + Add an ICP
-        </Link>
+        canEdit ? (
+          <Link href="/icps?add=1" className="btn" style={{ textDecoration: "none" }}>
+            + Add an ICP
+          </Link>
+        ) : (
+          <Link href="/records?view=everything" className="btn secondary" style={{ textDecoration: "none" }}>
+            See how your leads were sorted
+          </Link>
+        )
       }
       what={
         <>
@@ -288,11 +304,18 @@ export default async function IcpsPage({ searchParams }: { searchParams: Promise
               apparel brands, and one example that uses the website and Instagram together — then
               change them to suit what you sell. Nothing is applied until you press Apply.
             </p>
-            <form action={addExampleRules}>
-              <button className="btn" type="submit">
-                Start with five example ICPs
-              </button>
-            </form>
+            {canEdit ? (
+              <form action={addExampleRules}>
+                <button className="btn" type="submit">
+                  Start with five example ICPs
+                </button>
+              </form>
+            ) : (
+              <p style={{ fontSize: 14, color: "var(--ink-2)", margin: 0 }}>
+                The administrator writes these for the whole team. Until one exists, every lead is reported as being in
+                no ICP — which is a statement about the rules, not about the business.
+              </p>
+            )}
           </div>
         )}
 
@@ -384,10 +407,18 @@ export default async function IcpsPage({ searchParams }: { searchParams: Promise
                         )}
                       </td>
                       <td style={TD}>
-                        <Link href={`/icps?edit=${r.id}`} style={{ fontSize: 15, marginRight: 10 }}>
+                        {!canEdit ? (
+                          <Link href={`/records?view=everything&rule=${r.id}`} style={{ fontSize: 15 }}>
+                            See the leads
+                          </Link>
+                        ) : null}
+                        <Link
+                          href={`/icps?edit=${r.id}`}
+                          style={{ fontSize: 15, marginRight: 10, display: canEdit ? undefined : "none" }}
+                        >
                           Edit
                         </Link>
-                        <form action={deleteRule} style={{ display: "inline" }}>
+                        <form action={deleteRule} style={{ display: canEdit ? "inline" : "none" }}>
                           <input type="hidden" name="id" value={r.id} />
                           <button
                             type="submit"
@@ -483,7 +514,7 @@ export default async function IcpsPage({ searchParams }: { searchParams: Promise
           form in the middle of it. The backdrop is a link back to /icps, which is what closes it —
           no JavaScript is involved in any of this, only the URL.
         */}
-        {panelOpen && (
+        {panelOpen && canEdit && (
           <div style={{ position: "fixed", inset: 0, zIndex: 60 }}>
             <Link
               href="/icps"
@@ -525,6 +556,7 @@ export default async function IcpsPage({ searchParams }: { searchParams: Promise
         {/* Describe it in words and let the model pick the terms. Deliberately placed above the
             form rather than inside it: its output *is* the form below, filled in, so it reads as a
             step that happens first rather than as a field of the thing it fills. */}
+        {canEdit ? (
         <Panel
           title="✨ Not sure what words to use? Describe it instead"
           hint="Write what kind of business you want in plain English or Roman Urdu. The model picks keywords from how businesses in your own list actually write, fills the form below, and shows you what it would catch — before anything is saved."
@@ -546,6 +578,7 @@ export default async function IcpsPage({ searchParams }: { searchParams: Promise
             </div>
           </form>
         </Panel>
+        ) : null}
 
         {aiUnderstood !== null && (
           <div style={{ ...PANEL, padding: "15px 18px", borderColor: "var(--info)", background: "var(--info-bg)" }}>
@@ -578,6 +611,12 @@ export default async function IcpsPage({ searchParams }: { searchParams: Promise
           </div>
         )}
 
+        {!canEdit ? (
+          <InfoBox title="You can read these, not change them" tone="info">
+            The administrator writes the ICPs for the whole team, so one lead means the same thing to everybody. If an
+            ICP is wrong for the leads you are working, say so — it is a two-minute change at their end.
+          </InfoBox>
+        ) : null}
         <SectionHeading
           title={editing ? `Edit “${editing.name}”` : "Write a rule"}
           hint="Three boxes. Fill in the ones you want the rule to ask about, and leave the rest empty."
